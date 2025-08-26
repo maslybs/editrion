@@ -61,17 +61,18 @@ Notes:
 
 The project uses `src-tauri/icons/icon.png` as the single source image.
 
-Generate platform-specific assets:
+Generate platform-specific assets (run automatically on build):
 
 ```bash
-npm run icons
+npm run icons:tauri
 ```
 
-Requirements:
-- macOS: `sips` and `iconutil` (built-in).
-- Windows `.ico`: ImageMagick (`convert`) recommended. Alternatively, use `tauri icon src-tauri/icons/icon.png`.
+This uses the Tauri CLI to create macOS `.icns`, Windows `.ico`, and Linux PNG sizes into `src-tauri/icons/`. You can still use `npm run icons` (custom script) if you prefer system tools.
 
-The script produces Linux PNG sizes, macOS `.icns`, and Windows `.ico` (if ImageMagick is present) in `src-tauri/icons/`.
+macOS icon cache:
+- If the built app shows an old or generic icon, macOS may be caching it.
+- Remove the app from the Dock, delete any previously installed build, and reinstall.
+- Launch once; the icon should update. In stubborn cases, restart Finder.
 
 ## System Requirements
 
