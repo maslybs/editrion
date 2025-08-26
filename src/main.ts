@@ -32,6 +32,10 @@ class Editrion {
   private caseSensitiveBtn: HTMLElement;
   private wholeWordBtn: HTMLElement;
   private regexBtn: HTMLElement;
+  private welcomeContainer: HTMLElement;
+  private addFolderBtn?: HTMLElement;
+  private welcomeOpenFileBtn?: HTMLElement;
+  private welcomeOpenFolderBtn?: HTMLElement;
   private searchOptions = {
     caseSensitive: false,
     wholeWord: false,
@@ -48,6 +52,10 @@ class Editrion {
     this.caseSensitiveBtn = document.getElementById('case-sensitive-btn')!;
     this.wholeWordBtn = document.getElementById('whole-word-btn')!;
     this.regexBtn = document.getElementById('regex-btn')!;
+    this.welcomeContainer = document.getElementById('welcome')!;
+    this.addFolderBtn = document.getElementById('add-folder-btn') ?? undefined;
+    this.welcomeOpenFileBtn = document.getElementById('welcome-open-file') ?? undefined;
+    this.welcomeOpenFolderBtn = document.getElementById('welcome-open-folder') ?? undefined;
     
     this.init();
   }
@@ -83,6 +91,11 @@ class Editrion {
     
     // Don't load directory by default - only when project is opened
     
+    // Sidebar and welcome actions
+    this.addFolderBtn?.addEventListener('click', () => this.openFolder());
+    this.welcomeOpenFileBtn?.addEventListener('click', () => this.openFile());
+    this.welcomeOpenFolderBtn?.addEventListener('click', () => this.openFolder());
+
     // Setup keyboard shortcuts
     this.setupKeyboardShortcuts();
     
@@ -91,15 +104,36 @@ class Editrion {
     
     // Setup menu event listeners
     this.setupMenuListeners();
+
+    // Initial UI state
+    this.updateWelcomeState();
   }
   
+  // Legacy single-folder loader (unused now). Kept for reference.
   public async loadDirectory(path: string) {
     try {
-      const entries: FileItem[] = await invoke('read_dir', { path });
-      this.renderFileTree(entries, this.sidebarContainer);
+      const root = document.createElement('div');
+      root.className = 'folder-item collapsed';
+      root.textContent = path.split('/').pop() || path;
+      root.dataset.path = path;
+      root.addEventListener('click', () => this.toggleFolder(root));
+      this.sidebarContainer.appendChild(root);
     } catch (error) {
       console.error('Failed to load directory:', error);
     }
+  }
+
+  private addProjectRoot(path: string) {
+    const root = document.createElement('div');
+    root.className = 'folder-item collapsed';
+    root.textContent = path.split('/').pop() || path;
+    root.dataset.path = path;
+    root.dataset.root = 'true';
+    root.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleFolder(root);
+    });
+    this.sidebarContainer.appendChild(root);
   }
   
   private renderFileTree(entries: FileItem[], container: HTMLElement) {
@@ -119,7 +153,7 @@ class Editrion {
       element.dataset.path = entry.path;
       
       if (entry.is_dir) {
-        element.addEventListener('click', () => this.toggleFolder(element));
+        element.addEventListener('click', (e) => { e.stopPropagation(); this.toggleFolder(element); });
       } else {
         element.addEventListener('click', () => this.openFileFromTree(entry.path, entry.name));
       }
@@ -131,32 +165,33 @@ class Editrion {
   private async toggleFolder(element: HTMLElement) {
     const path = element.dataset.path!;
     const isExpanded = element.classList.contains('expanded');
-    
+
+    // Find existing subcontainer right after this element
+    const nextSibling = element.nextElementSibling as HTMLElement | null;
+    const hasSubtree = nextSibling && nextSibling.classList.contains('subtree') && nextSibling.dataset.parentPath === path;
+
     if (isExpanded) {
       element.classList.remove('expanded');
       element.classList.add('collapsed');
-      // Remove child elements
-      let nextSibling = element.nextElementSibling;
-      while (nextSibling && (nextSibling as HTMLElement).style.paddingLeft === '32px') {
-        const toRemove = nextSibling;
-        nextSibling = nextSibling.nextElementSibling;
-        toRemove.remove();
+      if (hasSubtree && nextSibling) {
+        nextSibling.remove();
       }
-    } else {
-      element.classList.remove('collapsed');
-      element.classList.add('expanded');
-      
-      try {
-        const entries: FileItem[] = await invoke('read_dir', { path });
-        const subContainer = document.createElement('div');
-        subContainer.style.paddingLeft = '16px';
-        this.renderFileTree(entries, subContainer);
-        
-        // Insert after current element
-        element.parentNode!.insertBefore(subContainer, element.nextSibling);
-      } catch (error) {
-        console.error('Failed to load subdirectory:', error);
-      }
+      return;
+    }
+
+    element.classList.remove('collapsed');
+    element.classList.add('expanded');
+
+    try {
+      const entries: FileItem[] = await invoke('read_dir', { path });
+      const subContainer = document.createElement('div');
+      subContainer.className = 'subtree';
+      subContainer.dataset.parentPath = path;
+      subContainer.style.paddingLeft = '16px';
+      this.renderFileTree(entries, subContainer);
+      element.parentNode!.insertBefore(subContainer, element.nextSibling);
+    } catch (error) {
+      console.error('Failed to load subdirectory:', error);
     }
   }
   
@@ -209,6 +244,7 @@ class Editrion {
       
       this.tabsContainer.appendChild(tabElement);
     });
+    this.updateWelcomeState();
   }
   
   private createEditor(tab: Tab, content: string) {
@@ -317,6 +353,17 @@ class Editrion {
     
     this.activeTabId = tabId;
     this.renderTabs();
+  }
+
+  private updateWelcomeState() {
+    const hasTabs = this.tabs.length > 0;
+    if (hasTabs) {
+      this.welcomeContainer.classList.add('hidden');
+      this.editorContainer.style.display = 'block';
+    } else {
+      this.welcomeContainer.classList.remove('hidden');
+      this.editorContainer.style.display = 'none';
+    }
   }
   
   private async saveFile(tab: Tab) {
@@ -482,14 +529,13 @@ class Editrion {
       });
       
       if (!folderPath) return; // User cancelled
-      
-      await this.loadDirectory(folderPath as string);
+      this.addProjectRoot(folderPath as string);
     } catch (error) {
       console.error('Failed to open folder dialog:', error);
       // Fallback - ask user to type path
       const path = prompt('Enter folder path to open:');
       if (path) {
-        await this.loadDirectory(path);
+        this.addProjectRoot(path);
       }
     }
   }
@@ -549,6 +595,7 @@ class Editrion {
     }
     
     this.renderTabs();
+    this.updateWelcomeState();
   }
   
   private setupKeyboardShortcuts() {

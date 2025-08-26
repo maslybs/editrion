@@ -11,10 +11,24 @@
     <div id="app">
       <div class="main-container">
         <div id="sidebar" class="sidebar">
+          <div class="sidebar-header">
+            <span class="sidebar-title">Projects</span>
+            <button id="add-folder-btn" class="sidebar-action">＋ Add Folder</button>
+          </div>
           <div id="folder-tree"></div>
         </div>
         <div id="main-content" class="main-content">
           <div id="tabs" class="tabs"></div>
+          <div id="welcome" class="welcome hidden">
+            <div class="welcome-card">
+              <h1>Welcome to Editrion</h1>
+              <p>Open a file or add a folder to get started.</p>
+              <div class="welcome-actions">
+                <button id="welcome-open-file" class="primary">Open File</button>
+                <button id="welcome-open-folder">Add Folder</button>
+              </div>
+            </div>
+          </div>
           <div id="editor-container" class="editor-container"></div>
         </div>
       </div>
