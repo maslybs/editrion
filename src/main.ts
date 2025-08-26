@@ -36,6 +36,10 @@ class Editrion {
   private addFolderBtn?: HTMLElement;
   private welcomeOpenFileBtn?: HTMLElement;
   private welcomeOpenFolderBtn?: HTMLElement;
+  private tabContextMenu!: HTMLElement;
+  private ctxCloseOthersItem!: HTMLElement;
+  private ctxCloseRightItem!: HTMLElement;
+  private contextTargetTabId: string | null = null;
   private searchOptions = {
     caseSensitive: false,
     wholeWord: false,
@@ -56,6 +60,9 @@ class Editrion {
     this.addFolderBtn = document.getElementById('add-folder-btn') ?? undefined;
     this.welcomeOpenFileBtn = document.getElementById('welcome-open-file') ?? undefined;
     this.welcomeOpenFolderBtn = document.getElementById('welcome-open-folder') ?? undefined;
+    this.tabContextMenu = document.getElementById('tab-context-menu')!;
+    this.ctxCloseOthersItem = document.getElementById('ctx-close-others')!;
+    this.ctxCloseRightItem = document.getElementById('ctx-close-right')!;
     
     this.init();
   }
@@ -107,6 +114,9 @@ class Editrion {
 
     // Initial UI state
     this.updateWelcomeState();
+
+    // Context menu and tab scrolling
+    this.setupTabContextMenu();
   }
   
   // Legacy single-folder loader (unused now). Kept for reference.
@@ -229,6 +239,7 @@ class Editrion {
     this.tabs.forEach(tab => {
       const tabElement = document.createElement('div');
       tabElement.className = `tab ${tab.id === this.activeTabId ? 'active' : ''}`;
+      tabElement.dataset.tabId = tab.id;
       tabElement.innerHTML = `
         <span>${tab.name}${tab.isDirty ? ' •' : ''}</span>
         <span class="close" data-tab-id="${tab.id}">✕</span>
@@ -240,6 +251,13 @@ class Editrion {
         } else {
           this.switchToTab(tab.id);
         }
+      });
+      
+      tabElement.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.contextTargetTabId = tab.id;
+        this.showTabContextMenu(e.clientX, e.clientY);
       });
       
       this.tabsContainer.appendChild(tabElement);
@@ -364,6 +382,69 @@ class Editrion {
       this.welcomeContainer.classList.remove('hidden');
       this.editorContainer.style.display = 'none';
     }
+  }
+
+  private setupTabContextMenu() {
+    // Actions
+    this.ctxCloseOthersItem.addEventListener('click', () => {
+      if (this.contextTargetTabId) {
+        this.closeOtherTabs(this.contextTargetTabId);
+        this.switchToTab(this.contextTargetTabId);
+      }
+      this.hideTabContextMenu();
+    });
+    this.ctxCloseRightItem.addEventListener('click', () => {
+      if (this.contextTargetTabId) {
+        this.closeTabsToRight(this.contextTargetTabId);
+        this.switchToTab(this.contextTargetTabId);
+      }
+      this.hideTabContextMenu();
+    });
+
+    // Dismiss menu
+    document.addEventListener('click', () => this.hideTabContextMenu());
+    window.addEventListener('blur', () => this.hideTabContextMenu());
+    window.addEventListener('resize', () => this.hideTabContextMenu());
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') this.hideTabContextMenu();
+    });
+
+    // Horizontal scroll for tabs (mouse wheel)
+    this.tabsContainer.addEventListener('wheel', (e: WheelEvent) => {
+      if (e.deltaY !== 0 && !e.shiftKey) {
+        e.preventDefault();
+        this.tabsContainer.scrollLeft += e.deltaY;
+      }
+    }, { passive: false });
+  }
+
+  private showTabContextMenu(x: number, y: number) {
+    const menu = this.tabContextMenu;
+    menu.classList.remove('hidden');
+    // After showing, measure size to constrain within viewport
+    const { innerWidth, innerHeight } = window;
+    const rect = menu.getBoundingClientRect();
+    const posX = Math.min(x, innerWidth - rect.width - 4);
+    const posY = Math.min(y, innerHeight - rect.height - 4);
+    menu.style.left = `${posX}px`;
+    menu.style.top = `${posY}px`;
+  }
+
+  private hideTabContextMenu() {
+    this.tabContextMenu.classList.add('hidden');
+    this.contextTargetTabId = null;
+  }
+
+  private closeOtherTabs(keepTabId: string) {
+    const ids = this.tabs.filter(t => t.id !== keepTabId).map(t => t.id);
+    ids.forEach(id => this.closeTab(id));
+  }
+
+  private closeTabsToRight(startTabId: string) {
+    const idx = this.tabs.findIndex(t => t.id === startTabId);
+    if (idx === -1) return;
+    const ids = this.tabs.slice(idx + 1).map(t => t.id);
+    ids.forEach(id => this.closeTab(id));
   }
   
   private async saveFile(tab: Tab) {
