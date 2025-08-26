@@ -5,7 +5,9 @@ use tauri::{Emitter, Manager};
 
 #[tauri::command]
 fn read_file(path: String) -> Result<String, String> {
-    std::fs::read_to_string(path).map_err(|e| e.to_string())
+    // Read as bytes and decode lossily to allow non-UTF8 text files
+    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    Ok(String::from_utf8_lossy(&bytes).to_string())
 }
 
 #[tauri::command]
@@ -54,6 +56,14 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .on_window_event(|window, event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // Typical macOS behavior: keep app running, just hide window
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
         .setup(|app| {
             use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
             
@@ -93,16 +103,31 @@ fn main() {
                 &PredefinedMenuItem::separator(app)?,
                 &select_all,
             ])?;
+            
+            // Window menu
+            let show_window = MenuItem::with_id(app, "show_window", "Show Window", true, None::<&str>)?;
+            let window_menu = Submenu::with_items(app, "Window", true, &[
+                &show_window,
+            ])?;
 
-            let menu = Menu::with_items(app, &[&file_menu, &edit_menu])?;
+            let menu = Menu::with_items(app, &[&file_menu, &edit_menu, &window_menu])?;
             app.set_menu(menu)?;
 
             Ok(())
         })
         .on_menu_event(|app, event| {
-            // Send menu events to frontend
             if let Some(window) = app.get_webview_window("main") {
-                let _ = window.emit("menu-event", event.id().as_ref());
+                // Always try to show/focus the window when interacting via menu
+                let _ = window.show();
+                let _ = window.set_focus();
+
+                let id = event.id().as_ref();
+                if id == "show_window" {
+                    // Handled above; do not forward to frontend
+                    return;
+                }
+                // Send menu events to frontend for other actions
+                let _ = window.emit("menu-event", id);
             }
         })
         .invoke_handler(tauri::generate_handler![read_file, write_file, read_dir, create_new_file, menu_action])

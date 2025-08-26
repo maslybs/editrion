@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { listen } from '@tauri-apps/api/event';
 import * as monaco from 'monaco-editor';
@@ -40,6 +40,7 @@ class Editrion {
   private ctxCloseOthersItem!: HTMLElement;
   private ctxCloseRightItem!: HTMLElement;
   private contextTargetTabId: string | null = null;
+  private projectRoots: string[] = [];
   private searchOptions = {
     caseSensitive: false,
     wholeWord: false,
@@ -103,6 +104,14 @@ class Editrion {
     this.welcomeOpenFileBtn?.addEventListener('click', () => this.openFile());
     this.welcomeOpenFolderBtn?.addEventListener('click', () => this.openFolder());
 
+    // Disable default browser context menu outside Monaco editor
+    document.addEventListener('contextmenu', (e) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.monaco-editor')) {
+        e.preventDefault();
+      }
+    });
+
     // Setup keyboard shortcuts
     this.setupKeyboardShortcuts();
     
@@ -117,6 +126,9 @@ class Editrion {
 
     // Context menu and tab scrolling
     this.setupTabContextMenu();
+
+    // Restore saved projects
+    this.restoreProjects();
   }
   
   // Legacy single-folder loader (unused now). Kept for reference.
@@ -133,7 +145,17 @@ class Editrion {
     }
   }
 
-  private addProjectRoot(path: string) {
+  private addProjectRoot(path: string, persist: boolean = true) {
+    if (!this.projectRoots.includes(path)) {
+      if (persist) {
+        this.projectRoots.push(path);
+        this.saveProjectRoots();
+      }
+    } else if (persist) {
+      // Already present; do not add duplicate UI entry
+      return;
+    }
+
     const root = document.createElement('div');
     root.className = 'folder-item collapsed';
     root.textContent = path.split('/').pop() || path;
@@ -144,6 +166,29 @@ class Editrion {
       this.toggleFolder(root);
     });
     this.sidebarContainer.appendChild(root);
+  }
+
+  private saveProjectRoots() {
+    try {
+      localStorage.setItem('editrion.projectRoots', JSON.stringify(this.projectRoots));
+    } catch (e) {
+      console.error('Failed to save project roots', e);
+    }
+  }
+
+  private restoreProjects() {
+    try {
+      const raw = localStorage.getItem('editrion.projectRoots');
+      if (!raw) return;
+      const paths: string[] = JSON.parse(raw);
+      const unique = Array.from(new Set(paths)).filter(Boolean);
+      this.projectRoots = [];
+      unique.forEach(p => this.addProjectRoot(p, false));
+      this.projectRoots = unique;
+      this.saveProjectRoots();
+    } catch (e) {
+      console.error('Failed to restore project roots', e);
+    }
   }
   
   private renderFileTree(entries: FileItem[], container: HTMLElement) {
@@ -214,22 +259,24 @@ class Editrion {
     }
     
     try {
-      const content: string = await invoke('read_file', { path });
       const tabId = Date.now().toString();
-      
-      const tab: Tab = {
-        id: tabId,
-        name,
-        path,
-        isDirty: false
-      };
-      
+      const isImage = this.isImagePath(path);
+      let content: string | null = null;
+      if (!isImage) {
+        content = await invoke('read_file', { path });
+      }
+      const tab: Tab = { id: tabId, name, path, isDirty: false };
       this.tabs.push(tab);
       this.renderTabs();
-      this.createEditor(tab, content);
+      if (isImage) {
+        this.createImageViewer(tab);
+      } else {
+        this.createEditor(tab, content || '');
+      }
       this.switchToTab(tabId);
     } catch (error) {
       console.error('Failed to open file:', error);
+      alert('Failed to open file: ' + (error as any));
     }
   }
   
@@ -317,6 +364,20 @@ class Editrion {
     
     tab.editor = editor;
   }
+
+  private createImageViewer(tab: Tab) {
+    const viewerElement = document.createElement('div');
+    viewerElement.id = `editor-${tab.id}`;
+    viewerElement.className = 'image-viewer';
+    viewerElement.style.width = '100%';
+    viewerElement.style.height = '100%';
+    viewerElement.style.display = 'none';
+    const img = document.createElement('img');
+    img.src = convertFileSrc(tab.path);
+    img.alt = tab.name;
+    viewerElement.appendChild(img);
+    this.editorContainer.appendChild(viewerElement);
+  }
   
   private getLanguageFromPath(path: string): string {
     const ext = path.split('.').pop()?.toLowerCase();
@@ -350,27 +411,27 @@ class Editrion {
   }
   
   private switchToTab(tabId: string) {
-    // Hide all editors
+    // Hide all editors/viewers
     this.tabs.forEach(tab => {
-      if (tab.editor) {
-        const element = document.getElementById(`editor-${tab.id}`);
-        if (element) element.style.display = 'none';
-      }
+      const element = document.getElementById(`editor-${tab.id}`);
+      if (element) element.style.display = 'none';
     });
     
     // Show active editor
     const activeTab = this.tabs.find(tab => tab.id === tabId);
-    if (activeTab?.editor) {
+    if (activeTab) {
       const element = document.getElementById(`editor-${tabId}`);
       if (element) {
         element.style.display = 'block';
-        activeTab.editor.layout();
-        activeTab.editor.focus();
-        // Ensure minimap is enabled after making editor visible
-        requestAnimationFrame(() => {
-          activeTab.editor?.updateOptions({ minimap: { enabled: true } });
-          activeTab.editor?.layout();
-        });
+        if (activeTab.editor) {
+          activeTab.editor.layout();
+          activeTab.editor.focus();
+          // Ensure minimap is enabled after making editor visible
+          requestAnimationFrame(() => {
+            activeTab.editor?.updateOptions({ minimap: { enabled: true } });
+            activeTab.editor?.layout();
+          });
+        }
       }
     }
     
@@ -584,11 +645,7 @@ class Editrion {
       const filePath = await open({
         title: 'Open File',
         multiple: false,
-        directory: false,
-        filters: [{
-          name: 'All Files',
-          extensions: ['*']
-        }]
+        directory: false
       });
       
       if (!filePath) return; // User cancelled
@@ -635,22 +692,24 @@ class Editrion {
     }
     
     try {
-      const content: string = await invoke('read_file', { path });
       const tabId = Date.now().toString();
-      
-      const tab: Tab = {
-        id: tabId,
-        name,
-        path,
-        isDirty: false
-      };
-      
+      const isImage = this.isImagePath(path);
+      let content: string | null = null;
+      if (!isImage) {
+        content = await invoke('read_file', { path });
+      }
+      const tab: Tab = { id: tabId, name, path, isDirty: false };
       this.tabs.push(tab);
       this.renderTabs();
-      this.createEditor(tab, content);
+      if (isImage) {
+        this.createImageViewer(tab);
+      } else {
+        this.createEditor(tab, content || '');
+      }
       this.switchToTab(tabId);
     } catch (error) {
       console.error('Failed to open file:', error);
+      alert('Failed to open file: ' + (error as any));
     }
   }
   
@@ -1021,6 +1080,12 @@ class Editrion {
     if (activeTab?.editor) {
       activeTab.editor.getAction('editor.action.startFindReplaceAction')?.run();
     }
+  }
+
+  private isImagePath(path: string): boolean {
+    const ext = (path.split('.').pop() || '').toLowerCase();
+    const imageExts = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico', 'tif', 'tiff'];
+    return imageExts.includes(ext);
   }
 
   // Utils
