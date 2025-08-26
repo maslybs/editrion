@@ -778,6 +778,18 @@ class Editrion {
   }
   
   private setupKeyboardShortcuts() {
+    // Capture-phase handler: intercept Esc before it reaches system default.
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!this.searchPanel.classList.contains('hidden')) {
+          this.hideSearch();
+        }
+        return;
+      }
+    }, true);
+
     document.addEventListener('keydown', (e) => {
       // Cmd+S / Ctrl+S - Save
       if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
@@ -889,6 +901,9 @@ class Editrion {
           this.findNext();
         }
       } else if (e.key === 'Escape') {
+        // Prevent Esc from bubbling (e.g., leaving fullscreen) when closing search
+        e.preventDefault();
+        e.stopPropagation();
         this.hideSearch();
       }
     });
