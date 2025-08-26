@@ -35,6 +35,7 @@ class Editrion {
   private regexBtn: HTMLElement;
   private welcomeContainer: HTMLElement;
   private addFolderBtn?: HTMLElement;
+  // Removed sidebar toggle in favor of menu actions
   private welcomeOpenFileBtn?: HTMLElement;
   private welcomeOpenFolderBtn?: HTMLElement;
   private tabContextMenu!: HTMLElement;
@@ -50,6 +51,8 @@ class Editrion {
   private searchDebounceHandle: number | null = null;
   private readonly searchDebounceMs = 150;
   private readonly maxSearchHighlights = 500;
+  private uiTheme: 'dark' | 'light' | 'custom' = 'dark';
+  private customThemeVars: string[] = [];
   
   constructor() {
     this.tabsContainer = document.getElementById('tabs')!;
@@ -73,6 +76,24 @@ class Editrion {
   }
   
   private async init() {
+    // Load and apply UI theme before editor init
+    const savedTheme = localStorage.getItem('editrion.theme');
+    if (savedTheme && savedTheme.startsWith('custom:')) {
+      const name = savedTheme.slice('custom:'.length);
+      const raw = localStorage.getItem('editrion.customThemes');
+      const map = raw ? JSON.parse(raw) as Record<string, any> : {};
+      const def = map[name];
+      if (def) {
+        this.applyCustomTheme(name, def);
+      } else {
+        this.setBuiltInTheme('dark');
+      }
+    } else if (savedTheme === 'light' || savedTheme === 'dark') {
+      this.setBuiltInTheme(savedTheme);
+    } else {
+      this.setBuiltInTheme('dark');
+    }
+
     // Setup Monaco theme
     monaco.editor.defineTheme('sublime-dark', {
       base: 'vs-dark',
@@ -98,8 +119,7 @@ class Editrion {
         'editor.selectionHighlightBorder': '#222218',
       }
     });
-    
-    monaco.editor.setTheme('sublime-dark');
+    // Monaco theme is applied in setBuiltInTheme/applyCustomTheme
     
     // Don't load directory by default - only when project is opened
     
@@ -133,6 +153,65 @@ class Editrion {
 
     // Restore saved projects
     this.restoreProjects();
+  }
+
+  private setBuiltInTheme(theme: 'dark' | 'light') {
+    this.uiTheme = theme;
+    document.body.setAttribute('data-theme', theme);
+    // Clear any custom CSS var overrides
+    const root = document.documentElement;
+    for (const key of this.customThemeVars) {
+      root.style.removeProperty(`--${key}`);
+    }
+    this.customThemeVars = [];
+    localStorage.setItem('editrion.theme', theme);
+    monaco.editor.setTheme(theme === 'dark' ? 'sublime-dark' : 'vs');
+  }
+
+  private applyCustomTheme(name: string, def: any) {
+    this.uiTheme = 'custom';
+    document.body.setAttribute('data-theme', 'custom');
+    const root = document.documentElement;
+    // Apply UI vars from def.ui; accept keys with or without leading --
+    this.customThemeVars = [];
+    const ui = def.ui || {};
+    for (const rawKey of Object.keys(ui)) {
+      const key = rawKey.startsWith('--') ? rawKey.substring(2) : rawKey;
+      const val = ui[rawKey];
+      root.style.setProperty(`--${key}`, String(val));
+      this.customThemeVars.push(key);
+    }
+    // Define Monaco theme
+    const monacoDef = def.monaco || { base: 'vs-dark', inherit: true, rules: [], colors: {} };
+    const themeId = `custom-${name}`;
+    try {
+      monaco.editor.defineTheme(themeId, monacoDef);
+      monaco.editor.setTheme(themeId);
+    } catch (_) {
+      // Fallback to dark if invalid
+      monaco.editor.setTheme('sublime-dark');
+    }
+    // Persist custom theme
+    const raw = localStorage.getItem('editrion.customThemes');
+    const map = raw ? JSON.parse(raw) as Record<string, any> : {};
+    map[name] = def;
+    localStorage.setItem('editrion.customThemes', JSON.stringify(map));
+    localStorage.setItem('editrion.theme', `custom:${name}`);
+  }
+
+  private async loadCustomThemeFromFile() {
+    try {
+      const paths = await open({ multiple: false, filters: [{ name: 'JSON', extensions: ['json'] }] });
+      const path = Array.isArray(paths) ? paths[0] : paths;
+      if (!path) return;
+      const content = await invoke<string>('read_file', { path });
+      const def = JSON.parse(content);
+      const name = def.name || 'custom';
+      this.applyCustomTheme(String(name), def);
+    } catch (e) {
+      console.error('Failed to load custom theme:', e);
+      alert('Failed to load custom theme. Please check JSON format.');
+    }
   }
 
   private basename(path: string): string {
@@ -347,7 +426,7 @@ class Editrion {
     const editor = monaco.editor.create(editorElement, {
       value: content,
       language: this.getLanguageFromPath(tab.path),
-      theme: 'sublime-dark',
+      theme: this.uiTheme === 'dark' ? 'sublime-dark' : 'vs',
       automaticLayout: true,
       fontSize: 14,
       lineHeight: 20,
@@ -956,6 +1035,15 @@ class Editrion {
           break;
         case 'quit_app':
           this.handleQuitRequest();
+          break;
+        case 'theme_dark':
+          this.setBuiltInTheme('dark');
+          break;
+        case 'theme_light':
+          this.setBuiltInTheme('light');
+          break;
+        case 'theme_load_custom':
+          this.loadCustomThemeFromFile();
           break;
       }
     });

@@ -128,13 +128,28 @@ fn main() {
                 &select_all,
             ])?;
             
+            // View -> Theme
+            let theme_dark = MenuItem::with_id(app, "theme_dark", "Theme: Dark", true, None::<&str>)?;
+            let theme_light = MenuItem::with_id(app, "theme_light", "Theme: Light", true, None::<&str>)?;
+            let theme_load_custom = MenuItem::with_id(app, "theme_load_custom", "Theme: Load Custom…", true, None::<&str>)?;
+            let theme_submenu = Submenu::with_items(app, "Theme", true, &[
+                &theme_dark,
+                &theme_light,
+                &PredefinedMenuItem::separator(app)?,
+                &theme_load_custom,
+            ])?;
+
+            let view_menu = Submenu::with_items(app, "View", true, &[
+                &theme_submenu,
+            ])?;
+
             // Window menu
             let show_window = MenuItem::with_id(app, "show_window", "Show Window", true, None::<&str>)?;
             let window_menu = Submenu::with_items(app, "Window", true, &[
                 &show_window,
             ])?;
 
-            let menu = Menu::with_items(app, &[&file_menu, &edit_menu, &window_menu])?;
+            let menu = Menu::with_items(app, &[&file_menu, &edit_menu, &view_menu, &window_menu])?;
             app.set_menu(menu)?;
 
             Ok(())
