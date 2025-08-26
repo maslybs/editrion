@@ -62,6 +62,7 @@ fn main() {
             let open_file = MenuItem::with_id(app, "open_file", "Open File...", true, Some("CmdOrCtrl+O"))?;
             let open_folder = MenuItem::with_id(app, "open_folder", "Open Folder...", true, None::<&str>)?;
             let save = MenuItem::with_id(app, "save", "Save", true, Some("CmdOrCtrl+S"))?;
+            let save_as = MenuItem::with_id(app, "save_as", "Save As…", true, Some("CmdOrCtrl+Shift+S"))?;
             let close_tab = MenuItem::with_id(app, "close_tab", "Close Tab", true, Some("CmdOrCtrl+W"))?;
             
             let file_menu = Submenu::with_items(app, "File", true, &[
@@ -70,6 +71,7 @@ fn main() {
                 &open_folder,
                 &PredefinedMenuItem::separator(app)?,
                 &save,
+                &save_as,
                 &PredefinedMenuItem::separator(app)?,
                 &close_tab,
             ])?;

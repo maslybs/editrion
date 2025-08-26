@@ -16,6 +16,8 @@ interface Tab {
   path: string;
   editor?: monaco.editor.IStandaloneCodeEditor;
   isDirty: boolean;
+  // Keep track of search highlight decorations for this tab
+  searchDecorationIds?: string[];
 }
 
 class Editrion {
@@ -326,17 +328,37 @@ class Editrion {
       // If it's a new file (starts with Untitled), show save dialog
       if (tab.path.startsWith('Untitled-')) {
         try {
+          // Suggest a sensible default name based on language
+          const lang = this.getLanguageFromPath(tab.path);
+          const langToExt: Record<string, string> = {
+            plaintext: 'txt', markdown: 'md', javascript: 'js', typescript: 'ts',
+            python: 'py', rust: 'rs', go: 'go', java: 'java', cpp: 'cpp', c: 'c',
+            csharp: 'cs', php: 'php', ruby: 'rb', html: 'html', css: 'css', scss: 'scss',
+            json: 'json', xml: 'xml', yaml: 'yml', sql: 'sql', shell: 'sh'
+          };
+          const defaultExt = langToExt[lang] || 'txt';
+          const defaultBase = tab.name && tab.name !== 'Untitled' ? tab.name : 'Untitled';
+          const defaultPath = defaultBase.includes('.') ? defaultBase : `${defaultBase}.${defaultExt}`;
           const savedPath = await save({
             title: 'Save File',
-            filters: [{
-              name: 'All Files',
-              extensions: ['*']
-            }]
+            defaultPath,
+            filters: [
+              { name: 'Text', extensions: ['txt', 'md', 'log'] },
+              { name: 'Code', extensions: ['js', 'ts', 'tsx', 'jsx', 'json', 'html', 'css', 'scss'] },
+              { name: 'Data', extensions: ['json', 'yaml', 'yml', 'xml', 'csv'] },
+              { name: 'Scripts', extensions: ['sh', 'py', 'rb', 'php'] },
+              { name: 'C/C++', extensions: ['c', 'h', 'cpp', 'hpp'] },
+              { name: 'Java/C#/Go/Rust', extensions: ['java', 'cs', 'go', 'rs'] },
+              { name: 'Markdown', extensions: ['md'] },
+              { name: 'All Files', extensions: ['*'] }
+            ]
           });
           
           if (!savedPath) return; // User cancelled
           
-          filePath = savedPath;
+          // If user didn't include an extension, append a sensible default
+          const hasExt = /\.[^\/\\]+$/.test(savedPath);
+          filePath = hasExt ? savedPath : `${savedPath}.${defaultExt}`;
           tab.path = filePath;
           tab.name = filePath.split('/').pop() || tab.name;
         } catch (error) {
@@ -357,6 +379,49 @@ class Editrion {
       this.renderTabs();
     } catch (error) {
       console.error('Failed to save file:', error);
+    }
+  }
+
+  private async saveFileAs(tab: Tab) {
+    if (!tab.editor) return;
+    try {
+      const lang = this.getLanguageFromPath(tab.path);
+      const langToExt: Record<string, string> = {
+        plaintext: 'txt', markdown: 'md', javascript: 'js', typescript: 'ts',
+        python: 'py', rust: 'rs', go: 'go', java: 'java', cpp: 'cpp', c: 'c',
+        csharp: 'cs', php: 'php', ruby: 'rb', html: 'html', css: 'css', scss: 'scss',
+        json: 'json', xml: 'xml', yaml: 'yml', sql: 'sql', shell: 'sh'
+      };
+      const defaultExt = langToExt[lang] || 'txt';
+      const defaultBase = tab.name && tab.name !== 'Untitled' ? tab.name : 'Untitled';
+      const defaultPath = defaultBase.includes('.') ? defaultBase : `${defaultBase}.${defaultExt}`;
+      const savedPath = await save({
+        title: 'Save As',
+        defaultPath,
+        filters: [
+          { name: 'Text', extensions: ['txt', 'md', 'log'] },
+          { name: 'Code', extensions: ['js', 'ts', 'tsx', 'jsx', 'json', 'html', 'css', 'scss'] },
+          { name: 'Data', extensions: ['json', 'yaml', 'yml', 'xml', 'csv'] },
+          { name: 'Scripts', extensions: ['sh', 'py', 'rb', 'php'] },
+          { name: 'C/C++', extensions: ['c', 'h', 'cpp', 'hpp'] },
+          { name: 'Java/C#/Go/Rust', extensions: ['java', 'cs', 'go', 'rs'] },
+          { name: 'Markdown', extensions: ['md'] },
+          { name: 'All Files', extensions: ['*'] }
+        ]
+      });
+
+      if (!savedPath) return;
+
+      const hasExt = /\.[^\/\\]+$/.test(savedPath);
+      const filePath = hasExt ? savedPath : `${savedPath}.${defaultExt}`;
+      const content = tab.editor.getValue();
+      await invoke('write_file', { path: filePath, content });
+      tab.path = filePath;
+      tab.name = filePath.split('/').pop() || tab.name;
+      tab.isDirty = false;
+      this.renderTabs();
+    } catch (error) {
+      console.error('Failed to save as:', error);
     }
   }
   
@@ -488,6 +553,12 @@ class Editrion {
   
   private setupKeyboardShortcuts() {
     document.addEventListener('keydown', (e) => {
+      // Cmd+Shift+S / Ctrl+Shift+S - Save As
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'S' || e.key === 's')) {
+        e.preventDefault();
+        this.saveActiveFileAs();
+        return;
+      }
       // Cmd+D / Ctrl+D - Add selection to next find match (multi-cursor)
       if ((e.metaKey || e.ctrlKey) && e.key === 'd') {
         e.preventDefault();
@@ -611,6 +682,9 @@ class Editrion {
         case 'save':
           this.saveActiveFile();
           break;
+        case 'save_as':
+          this.saveActiveFileAs();
+          break;
         case 'close_tab':
           if (this.activeTabId) {
             this.closeTab(this.activeTabId);
@@ -676,38 +750,54 @@ class Editrion {
     if (!activeTab?.editor) return;
     
     const searchText = this.searchInput.value;
-    if (!searchText) return;
-    
     const model = activeTab.editor.getModel();
-    if (!model) return;
+    if (!searchText || !model) {
+      // Clear any previous decorations when search is empty
+      if (activeTab.searchDecorationIds && activeTab.searchDecorationIds.length > 0) {
+        const cleared = activeTab.editor.deltaDecorations(activeTab.searchDecorationIds, []);
+        activeTab.searchDecorationIds = cleared;
+      }
+      this.searchCount.textContent = '';
+      return;
+    }
     
     try {
+      // Prepare query respecting regex / wholeWord / caseSensitive
+      let query = searchText;
+      let isRegex = this.searchOptions.regex;
+      if (this.searchOptions.wholeWord && !isRegex) {
+        query = `\\b${this.escapeRegExp(searchText)}\\b`;
+        isRegex = true;
+      }
       const matches = model.findMatches(
-        searchText, 
-        false, 
-        this.searchOptions.regex, 
-        this.searchOptions.caseSensitive, 
-        this.searchOptions.wholeWord ? searchText : null, 
+        query,
+        false,
+        isRegex,
+        this.searchOptions.caseSensitive,
+        null,
         true
       );
       
       this.searchCount.textContent = `${matches.length} matches`;
       
       // Highlight all matches
-      if (matches.length > 0) {
-        const decorations = matches.map(match => ({
-          range: match.range,
-          options: {
-            className: 'search-highlight',
-            stickiness: 1
-          }
-        }));
-        
-        activeTab.editor.deltaDecorations([], decorations);
-      }
+      const decorations = matches.map(match => ({
+        range: match.range,
+        options: {
+          className: 'search-highlight',
+          stickiness: 1
+        }
+      }));
+      const newIds = activeTab.editor.deltaDecorations(activeTab.searchDecorationIds || [], decorations);
+      activeTab.searchDecorationIds = newIds;
     } catch (error) {
       // Handle regex errors
       this.searchCount.textContent = 'Invalid regex';
+      // On invalid regex, clear previous highlights to avoid stale state
+      if (activeTab.searchDecorationIds && activeTab.searchDecorationIds.length > 0) {
+        const cleared = activeTab.editor.deltaDecorations(activeTab.searchDecorationIds, []);
+        activeTab.searchDecorationIds = cleared;
+      }
     }
   }
   
@@ -722,12 +812,19 @@ class Editrion {
     if (!model) return;
     
     try {
+      // Prepare query respecting regex / wholeWord / caseSensitive
+      let query = searchText;
+      let isRegex = this.searchOptions.regex;
+      if (this.searchOptions.wholeWord && !isRegex) {
+        query = `\\b${this.escapeRegExp(searchText)}\\b`;
+        isRegex = true;
+      }
       const matches = model.findMatches(
-        searchText, 
-        false, 
-        this.searchOptions.regex, 
-        this.searchOptions.caseSensitive, 
-        this.searchOptions.wholeWord ? searchText : null, 
+        query,
+        false,
+        isRegex,
+        this.searchOptions.caseSensitive,
+        null,
         true
       );
       
@@ -772,6 +869,13 @@ class Editrion {
     }
   }
   
+  public saveActiveFileAs() {
+    const activeTab = this.tabs.find(tab => tab.id === this.activeTabId);
+    if (activeTab) {
+      this.saveFileAs(activeTab);
+    }
+  }
+  
   public selectAllOccurrences() {
     const activeTab = this.tabs.find(tab => tab.id === this.activeTabId);
     if (activeTab?.editor) {
@@ -784,6 +888,11 @@ class Editrion {
     if (activeTab?.editor) {
       activeTab.editor.getAction('editor.action.startFindReplaceAction')?.run();
     }
+  }
+
+  // Utils
+  private escapeRegExp(text: string): string {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 }
 
