@@ -366,6 +366,11 @@ class Editrion {
         element.style.display = 'block';
         activeTab.editor.layout();
         activeTab.editor.focus();
+        // Ensure minimap is enabled after making editor visible
+        requestAnimationFrame(() => {
+          activeTab.editor?.updateOptions({ minimap: { enabled: true } });
+          activeTab.editor?.layout();
+        });
       }
     }
     
