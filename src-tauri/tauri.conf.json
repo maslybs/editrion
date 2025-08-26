@@ -31,7 +31,6 @@
             "core:event:default",
             "core:event:allow-listen", 
             "core:event:allow-emit",
-            "shell:default",
             "dialog:default",
             "dialog:allow-open",
             "dialog:allow-save"
@@ -53,9 +52,5 @@
       "icons/1024x1024.png"
     ]
   },
-  "plugins": {
-    "shell": {
-      "open": true
-    }
-  }
+  "plugins": {}
 }

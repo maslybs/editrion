@@ -47,6 +47,9 @@ class Editrion {
     wholeWord: false,
     regex: false
   };
+  private searchDebounceHandle: number | null = null;
+  private readonly searchDebounceMs = 150;
+  private readonly maxSearchHighlights = 500;
   
   constructor() {
     this.tabsContainer = document.getElementById('tabs')!;
@@ -199,28 +202,30 @@ class Editrion {
   
   private renderFileTree(entries: FileItem[], container: HTMLElement) {
     container.innerHTML = '';
-    
+
     // Sort: directories first, then files
     entries.sort((a, b) => {
       if (a.is_dir && !b.is_dir) return -1;
       if (!a.is_dir && b.is_dir) return 1;
       return a.name.localeCompare(b.name);
     });
-    
+
+    const frag = document.createDocumentFragment();
     entries.forEach(entry => {
       const element = document.createElement('div');
       element.className = entry.is_dir ? 'folder-item collapsed' : 'file-item';
       element.textContent = entry.name;
       element.dataset.path = entry.path;
-      
+
       if (entry.is_dir) {
         element.addEventListener('click', (e) => { e.stopPropagation(); this.toggleFolder(element); });
       } else {
         element.addEventListener('click', () => this.openFileFromTree(entry.path, entry.name));
       }
-      
-      container.appendChild(element);
+
+      frag.appendChild(element);
     });
+    container.appendChild(frag);
   }
   
   private async toggleFolder(element: HTMLElement) {
@@ -265,7 +270,9 @@ class Editrion {
     }
     
     try {
-      const tabId = Date.now().toString();
+      const tabId = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+        ? (crypto as any).randomUUID()
+        : Date.now().toString();
       const isImage = this.isImagePath(path);
       let content: string | null = null;
       if (!isImage) {
@@ -288,16 +295,25 @@ class Editrion {
   
   private renderTabs() {
     this.tabsContainer.innerHTML = '';
-    
+
+    const frag = document.createDocumentFragment();
     this.tabs.forEach(tab => {
       const tabElement = document.createElement('div');
       tabElement.className = `tab ${tab.id === this.activeTabId ? 'active' : ''}`;
       tabElement.dataset.tabId = tab.id;
-      tabElement.innerHTML = `
-        <span>${tab.name}${tab.isDirty ? ' •' : ''}</span>
-        <span class="close" data-tab-id="${tab.id}">✕</span>
-      `;
-      
+
+      const titleSpan = document.createElement('span');
+      // Avoid XSS by using textContent instead of innerHTML
+      titleSpan.textContent = tab.name + (tab.isDirty ? ' •' : '');
+
+      const closeSpan = document.createElement('span');
+      closeSpan.className = 'close';
+      closeSpan.dataset.tabId = tab.id;
+      closeSpan.textContent = '✕';
+
+      tabElement.appendChild(titleSpan);
+      tabElement.appendChild(closeSpan);
+
       tabElement.addEventListener('click', (e) => {
         if ((e.target as HTMLElement).classList.contains('close')) {
           this.closeTab(tab.id);
@@ -305,16 +321,17 @@ class Editrion {
           this.switchToTab(tab.id);
         }
       });
-      
+
       tabElement.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();
         this.contextTargetTabId = tab.id;
         this.showTabContextMenu(e.clientX, e.clientY);
       });
-      
-      this.tabsContainer.appendChild(tabElement);
+
+      frag.appendChild(tabElement);
     });
+    this.tabsContainer.appendChild(frag);
     this.updateWelcomeState();
   }
   
@@ -634,7 +651,9 @@ class Editrion {
   public async createNewFile() {
     try {
       const tempName: string = await invoke('create_new_file');
-      const tabId = Date.now().toString();
+      const tabId = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+        ? (crypto as any).randomUUID()
+        : Date.now().toString();
       
       const tab: Tab = {
         id: tabId,
@@ -705,7 +724,9 @@ class Editrion {
     }
     
     try {
-      const tabId = Date.now().toString();
+      const tabId = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+        ? (crypto as any).randomUUID()
+        : Date.now().toString();
       const isImage = this.isImagePath(path);
       let content: string | null = null;
       if (!isImage) {
@@ -872,7 +893,15 @@ class Editrion {
       }
     });
     
-    this.searchInput.addEventListener('input', () => this.updateSearch());
+    this.searchInput.addEventListener('input', () => {
+      // Debounce search updates to improve performance on large files
+      if (this.searchDebounceHandle) {
+        clearTimeout(this.searchDebounceHandle);
+      }
+      this.searchDebounceHandle = window.setTimeout(() => {
+        this.updateSearch();
+      }, this.searchDebounceMs);
+    });
   }
   
   private async setupMenuListeners() {
@@ -1008,10 +1037,13 @@ class Editrion {
         true
       );
       
-      this.searchCount.textContent = `${matches.length} matches`;
+      const total = matches.length;
+      const limited = matches.slice(0, this.maxSearchHighlights);
+      const limitedNote = total > this.maxSearchHighlights ? ` (showing ${this.maxSearchHighlights})` : '';
+      this.searchCount.textContent = `${total} matches${limitedNote}`;
       
       // Highlight all matches
-      const decorations = matches.map(match => ({
+      const decorations = limited.map(match => ({
         range: match.range,
         options: {
           className: 'search-highlight',

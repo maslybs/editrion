@@ -9,7 +9,6 @@
         "core:event:default",
         "core:event:allow-listen",
         "core:event:allow-emit",
-        "shell:default",
         "dialog:default",
         "dialog:allow-open",
         "dialog:allow-save"
