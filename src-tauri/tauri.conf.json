@@ -1,0 +1,52 @@
+{
+  "productName": "Editrion",
+  "version": "1.0.0",
+  "identifier": "com.editrion.editor",
+  "build": {
+    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "fullscreen": false,
+        "resizable": true,
+        "title": "Editrion",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600
+      }
+    ],
+    "security": {
+      "capabilities": [
+        {
+          "identifier": "main-capability",
+          "description": "Main capability for TaurEd",
+          "windows": ["main"],
+          "permissions": [
+            "core:default",
+            "core:event:default",
+            "core:event:allow-listen", 
+            "core:event:allow-emit",
+            "shell:default",
+            "dialog:default",
+            "dialog:allow-open",
+            "dialog:allow-save"
+          ]
+        }
+      ]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all"
+  },
+  "plugins": {
+    "shell": {
+      "open": true
+    }
+  }
+}

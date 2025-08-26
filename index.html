@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Editrion</title>
+  </head>
+  <body>
+    <div id="app">
+      <div class="main-container">
+        <div id="sidebar" class="sidebar">
+          <div id="folder-tree"></div>
+        </div>
+        <div id="main-content" class="main-content">
+          <div id="tabs" class="tabs"></div>
+          <div id="editor-container" class="editor-container"></div>
+        </div>
+      </div>
+      <div id="search-panel" class="search-panel hidden">
+        <div class="search-controls">
+          <div class="search-input-group">
+            <input type="text" id="search-input" placeholder="Find..." />
+            <span id="search-results-count" class="search-count"></span>
+          </div>
+          <div class="search-buttons">
+            <button id="find-all-btn" class="search-btn primary">Find All</button>
+            <button id="find-prev-btn" class="search-btn">↑</button>
+            <button id="find-next-btn" class="search-btn">↓</button>
+            <button id="case-sensitive-btn" class="search-btn toggle">Aa</button>
+            <button id="whole-word-btn" class="search-btn toggle">W</button>
+            <button id="regex-btn" class="search-btn toggle">.*</button>
+            <button id="close-search-btn" class="search-btn close">✕</button>
+          </div>
+        </div>
+      </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

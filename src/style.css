@@ -1,0 +1,253 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  background-color: #272822;
+  color: #f8f8f2;
+  overflow: hidden;
+}
+
+#app {
+  display: flex;
+  height: 100vh;
+}
+
+.main-container {
+  display: flex;
+  flex: 1;
+}
+
+.sidebar {
+  width: 250px;
+  background-color: #2f3129;
+  border-right: 1px solid #3e3d32;
+  padding: 10px;
+  overflow-y: auto;
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.tabs {
+  background-color: #3e3d32;
+  border-bottom: 1px solid #5a5a5a;
+  display: flex;
+  overflow-x: auto;
+  min-height: 35px;
+}
+
+.tab {
+  background-color: #49483e;
+  color: #a6a5a0;
+  padding: 8px 16px;
+  cursor: pointer;
+  border-right: 1px solid #5a5a5a;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  flex-shrink: 0;
+  min-width: 120px;
+}
+
+.tab.active {
+  background-color: #272822;
+  color: #f8f8f2;
+}
+
+.tab:hover {
+  background-color: #3e3d32;
+}
+
+.tab .close {
+  margin-left: 8px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.tab .close:hover {
+  opacity: 1;
+}
+
+.editor-container {
+  flex: 1;
+  position: relative;
+}
+
+.monaco-editor {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* File tree styles */
+.folder-item, .file-item {
+  padding: 2px 4px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #a6a5a0;
+}
+
+.folder-item:hover, .file-item:hover {
+  background-color: #3e3d32;
+}
+
+.folder-item.expanded::before {
+  content: "▼ ";
+}
+
+.folder-item.collapsed::before {
+  content: "▶ ";
+}
+
+.file-item {
+  padding-left: 16px;
+}
+
+.file-item.selected {
+  background-color: #49483e;
+  color: #f8f8f2;
+}
+
+/* Scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #272822;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #49483e;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #5a5a5a;
+}
+
+/* Search panel styles */
+.search-panel {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: #3e3d32;
+  border-top: 1px solid #5a5a5a;
+  z-index: 1000;
+  transition: transform 0.3s ease-in-out;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.3);
+}
+
+.search-panel.hidden {
+  transform: translateY(100%);
+}
+
+.search-controls {
+  display: flex;
+  align-items: center;
+  padding: 12px 20px;
+  gap: 16px;
+  max-width: 100%;
+}
+
+.search-input-group {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+#search-input {
+  width: 100%;
+  background-color: #272822;
+  color: #f8f8f2;
+  border: 1px solid #5a5a5a;
+  padding: 8px 12px;
+  padding-right: 80px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 13px;
+  border-radius: 3px;
+}
+
+#search-input:focus {
+  outline: none;
+  border-color: #66d9ef;
+  box-shadow: 0 0 0 2px rgba(102, 217, 239, 0.2);
+}
+
+.search-count {
+  position: absolute;
+  right: 12px;
+  color: #a6a5a0;
+  font-size: 11px;
+  pointer-events: none;
+  background-color: #272822;
+  padding: 0 4px;
+}
+
+.search-buttons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.search-btn {
+  background-color: #49483e;
+  color: #f8f8f2;
+  border: none;
+  padding: 8px 12px;
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 3px;
+  font-family: inherit;
+  transition: all 0.2s;
+  min-width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.search-btn:hover {
+  background-color: #5a5a5a;
+}
+
+.search-btn.primary {
+  background-color: #66d9ef;
+  color: #272822;
+  font-weight: bold;
+  padding: 8px 16px;
+  min-width: auto;
+}
+
+.search-btn.primary:hover {
+  background-color: #7ee8ff;
+}
+
+.search-btn.toggle.active {
+  background-color: #a6e22e;
+  color: #272822;
+}
+
+.search-btn.close {
+  background-color: #f92672;
+}
+
+.search-btn.close:hover {
+  background-color: #ff4081;
+}
+
+/* Search highlighting */
+.search-highlight {
+  background-color: rgba(255, 215, 0, 0.3) !important;
+  border: 1px solid #ffd700 !important;
+}
