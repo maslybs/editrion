@@ -52,16 +52,30 @@ async fn menu_action(window: tauri::Window, action: String) {
     window.emit("menu-event", &action).unwrap();
 }
 
+#[tauri::command]
+fn quit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .on_window_event(|window, event| {
-            #[cfg(target_os = "macos")]
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                // Typical macOS behavior: keep app running, just hide window
-                api.prevent_close();
-                let _ = window.hide();
+            match event {
+                #[cfg(target_os = "macos")]
+                tauri::WindowEvent::CloseRequested { api, .. } => {
+                    // macOS: keep app running, just hide window
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+                #[cfg(not(target_os = "macos"))]
+                tauri::WindowEvent::CloseRequested { api, .. } => {
+                    // Windows/Linux: ask frontend to confirm quit if there are unsaved changes
+                    api.prevent_close();
+                    let _ = window.emit("request-close", {});
+                }
+                _ => {}
             }
         })
         .setup(|app| {
@@ -75,6 +89,7 @@ fn main() {
             let save_as = MenuItem::with_id(app, "save_as", "Save As…", true, Some("CmdOrCtrl+Shift+S"))?;
             let close_tab = MenuItem::with_id(app, "close_tab", "Close Tab", true, Some("CmdOrCtrl+W"))?;
             
+            let quit_custom = MenuItem::with_id(app, "quit_app", "Quit Editrion", true, Some("CmdOrCtrl+Q"))?;
             let file_menu = Submenu::with_items(app, "File", true, &[
                 &new_file,
                 &open_file, 
@@ -84,6 +99,8 @@ fn main() {
                 &save_as,
                 &PredefinedMenuItem::separator(app)?,
                 &close_tab,
+                &PredefinedMenuItem::separator(app)?,
+                &quit_custom,
             ])?;
 
             let find = MenuItem::with_id(app, "find", "Find", true, Some("CmdOrCtrl+F"))?;
@@ -126,11 +143,16 @@ fn main() {
                     // Handled above; do not forward to frontend
                     return;
                 }
+                if id == "quit_app" {
+                    // Forward to frontend to handle unsaved changes confirmation
+                    let _ = window.emit("menu-event", id);
+                    return;
+                }
                 // Send menu events to frontend for other actions
                 let _ = window.emit("menu-event", id);
             }
         })
-        .invoke_handler(tauri::generate_handler![read_file, write_file, read_dir, create_new_file, menu_action])
+        .invoke_handler(tauri::generate_handler![read_file, write_file, read_dir, create_new_file, menu_action, quit_app])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -18,6 +18,7 @@ interface Tab {
   isDirty: boolean;
   // Keep track of search highlight decorations for this tab
   searchDecorationIds?: string[];
+  originalContent?: string;
 }
 
 class Editrion {
@@ -130,6 +131,11 @@ class Editrion {
     // Restore saved projects
     this.restoreProjects();
   }
+
+  private basename(path: string): string {
+    const parts = path.split(/[/\\]/);
+    return parts.pop() || path;
+  }
   
   // Legacy single-folder loader (unused now). Kept for reference.
   public async loadDirectory(path: string) {
@@ -158,7 +164,7 @@ class Editrion {
 
     const root = document.createElement('div');
     root.className = 'folder-item collapsed';
-    root.textContent = path.split('/').pop() || path;
+    root.textContent = this.basename(path);
     root.dataset.path = path;
     root.dataset.root = 'true';
     root.addEventListener('click', (e) => {
@@ -265,7 +271,7 @@ class Editrion {
       if (!isImage) {
         content = await invoke('read_file', { path });
       }
-      const tab: Tab = { id: tabId, name, path, isDirty: false };
+      const tab: Tab = { id: tabId, name, path, isDirty: false, originalContent: content ?? '' };
       this.tabs.push(tab);
       this.renderTabs();
       if (isImage) {
@@ -328,7 +334,7 @@ class Editrion {
       automaticLayout: true,
       fontSize: 14,
       lineHeight: 20,
-      fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
+      fontFamily: 'Consolas, Monaco, Menlo, "Ubuntu Mono", monospace',
       minimap: { enabled: true },
       scrollBeyondLastLine: false,
       wordWrap: 'off',
@@ -345,9 +351,13 @@ class Editrion {
     });
     
     // Enable multi-cursor with Cmd+Click (Mac) / Ctrl+Click (Windows/Linux)
+    tab.originalContent = tab.originalContent ?? content;
     editor.onDidChangeModelContent(() => {
-      if (!tab.isDirty) {
-        tab.isDirty = true;
+      const current = editor.getValue();
+      const baseline = tab.originalContent ?? '';
+      const wasDirty = tab.isDirty;
+      tab.isDirty = current !== baseline;
+      if (tab.isDirty !== wasDirty) {
         this.renderTabs();
       }
     });
@@ -554,7 +564,7 @@ class Editrion {
           const hasExt = /\.[^\/\\]+$/.test(savedPath);
           filePath = hasExt ? savedPath : `${savedPath}.${defaultExt}`;
           tab.path = filePath;
-          tab.name = filePath.split('/').pop() || tab.name;
+          tab.name = this.basename(filePath) || tab.name;
         } catch (error) {
           console.error('Failed to open save dialog:', error);
           // Fallback - ask user to type path
@@ -569,6 +579,7 @@ class Editrion {
       
       const content = tab.editor.getValue();
       await invoke('write_file', { path: filePath, content });
+      tab.originalContent = content;
       tab.isDirty = false;
       this.renderTabs();
     } catch (error) {
@@ -611,7 +622,8 @@ class Editrion {
       const content = tab.editor.getValue();
       await invoke('write_file', { path: filePath, content });
       tab.path = filePath;
-      tab.name = filePath.split('/').pop() || tab.name;
+      tab.name = this.basename(filePath) || tab.name;
+      tab.originalContent = content;
       tab.isDirty = false;
       this.renderTabs();
     } catch (error) {
@@ -628,7 +640,8 @@ class Editrion {
         id: tabId,
         name: 'Untitled',
         path: tempName,
-        isDirty: false
+        isDirty: false,
+        originalContent: ''
       };
       
       this.tabs.push(tab);
@@ -650,14 +663,14 @@ class Editrion {
       
       if (!filePath) return; // User cancelled
       
-      const fileName = (filePath as string).split('/').pop() || 'Untitled';
+      const fileName = this.basename(filePath as string) || 'Untitled';
       await this.openFileByPath(filePath as string, fileName);
     } catch (error) {
       console.error('Failed to open file dialog:', error);
       // Fallback - ask user to type path
       const path = prompt('Enter file path to open:');
       if (path) {
-        const name = path.split('/').pop() || 'Untitled';
+        const name = this.basename(path) || 'Untitled';
         await this.openFileByPath(path, name);
       }
     }
@@ -698,7 +711,7 @@ class Editrion {
       if (!isImage) {
         content = await invoke('read_file', { path });
       }
-      const tab: Tab = { id: tabId, name, path, isDirty: false };
+      const tab: Tab = { id: tabId, name, path, isDirty: false, originalContent: content ?? '' };
       this.tabs.push(tab);
       this.renderTabs();
       if (isImage) {
@@ -745,6 +758,12 @@ class Editrion {
   
   private setupKeyboardShortcuts() {
     document.addEventListener('keydown', (e) => {
+      // Cmd+S / Ctrl+S - Save
+      if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        this.saveActiveFile();
+        return;
+      }
       // Cmd+Shift+S / Ctrl+Shift+S - Save As
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'S' || e.key === 's')) {
         e.preventDefault();
@@ -891,8 +910,27 @@ class Editrion {
         case 'select_all_occurrences':
           this.selectAllOccurrences();
           break;
+        case 'quit_app':
+          this.handleQuitRequest();
+          break;
       }
     });
+    // Handle native window close request (Windows/Linux)
+    await listen('request-close', async () => {
+      await this.handleQuitRequest();
+    });
+  }
+
+  private async handleQuitRequest() {
+    const hasDirty = this.tabs.some(t => t.isDirty);
+    if (!hasDirty) {
+      await invoke('quit_app');
+      return;
+    }
+    const confirmQuit = confirm('You have unsaved changes. Quit without saving?');
+    if (confirmQuit) {
+      await invoke('quit_app');
+    }
   }
   
   private toggleSearchOption(option: keyof typeof this.searchOptions) {
