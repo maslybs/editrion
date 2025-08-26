@@ -1,65 +1,85 @@
-# Sublime Editor
+# Editrion
 
-Простий редактор тексту в стилі Sublime Text, створений з використанням Tauri та Monaco Editor.
+A lightweight code editor built with Tauri and Monaco Editor.
 
-## Функції
+## Features
 
-- ✅ Файловий провідник (sidebar)
-- ✅ Система табів для відкритих файлів
-- ✅ Мультикурсор редагування
-- ✅ Темна тема в стилі Monokai
-- ✅ Горячі клавіші як у Sublime Text
-- ✅ Підсвічування синтаксису
+- File explorer (sidebar)
+- Multiple tabs for open files
+- Multi-cursor editing
+- Dark theme inspired by Monokai
+- Familiar Sublime-like keybindings
+- Syntax highlighting for popular languages
 
-## Горячі клавіші
+## Shortcuts
 
-- `Cmd/Ctrl + D` - Додати наступне входження в мультикурсор
-- `Cmd/Ctrl + Shift + L` - Вибрати всі входження
-- `Cmd/Ctrl + S` - Зберегти файл
-- `Cmd/Ctrl + Shift + S` - Зберегти як…
-- `Cmd/Ctrl + W` - Закрити таб
-- `Cmd/Ctrl + Click` - Додати курсор
+- `Cmd/Ctrl + S`: Save
+- `Cmd/Ctrl + Shift + S`: Save As…
+- `Cmd/Ctrl + D`: Add selection to next match (multi-cursor)
+- `Cmd/Ctrl + Shift + L`: Select all occurrences
+- `Cmd/Ctrl + W`: Close tab
+- `Cmd/Ctrl + Click`: Add cursor
 
-## Запуск
+## Development
 
-1. Встановіть залежності:
-   ```bash
-   npm install
-   ```
+1) Install dependencies
 
-2. Запустіть в режимі розробки:
-   ```bash
-   npm run tauri dev
-   ```
+```bash
+npm install
+```
 
-3. Зборка для продакшену:
-   ```bash
+2) Run in development (Tauri + Vite dev server)
+
+```bash
+npm run tauri dev
+```
+
+3) Build a distributable app
+
+```bash
 npm run tauri build
 ```
 
-## Іконки застосунку
+Notes:
+- `dist/` is generated during build and is git-ignored.
+- `tauri.conf.json` points to the built frontend via `frontendDist: "../dist"`.
 
-Використовується `src-tauri/icons/icon.png` як джерело. Для коректних іконок на всіх платформах згенеруйте набір ресурсів:
+## Save / Save As
 
-1) На macOS має бути `sips` і `iconutil` (вбудовано), для Windows `.ico` бажано мати ImageMagick (`convert`).
+- Save: `Cmd/Ctrl + S` or File → Save.
+- Save As: `Cmd/Ctrl + Shift + S` or File → Save As…
+  - The save dialog includes format filters.
+  - If no extension is typed, a sensible default is appended (e.g. `.txt`).
 
-2) Запустіть:
+## Find and Highlighting
+
+- Open find: `Cmd/Ctrl + F`.
+- As you type, previous highlights are cleared; only current matches remain.
+- Whole word uses word boundaries for precise matches.
+
+## App Icons
+
+The project uses `src-tauri/icons/icon.png` as the single source image.
+
+Generate platform-specific assets:
 
 ```bash
 npm run icons
 ```
 
-Скрипт збере PNG різних розмірів (Linux), `.icns` (macOS) і, за наявності ImageMagick, `.ico` (Windows) у `src-tauri/icons/`.
+Requirements:
+- macOS: `sips` and `iconutil` (built-in).
+- Windows `.ico`: ImageMagick (`convert`) recommended. Alternatively, use `tauri icon src-tauri/icons/icon.png`.
 
-Якщо `.ico` не згенерувався, для Windows можна встановити ImageMagick або скористатися `tauri icon src-tauri/icons/icon.png`.
+The script produces Linux PNG sizes, macOS `.icns`, and Windows `.ico` (if ImageMagick is present) in `src-tauri/icons/`.
 
-## Системні вимоги
+## System Requirements
 
 - Node.js 16+
 - Rust 1.60+
-- Tauri CLI
+- Tauri CLI 2.x
 
-## Підтримувані формати файлів
+## Supported File Types
 
 - JavaScript/TypeScript
 - Python
@@ -68,4 +88,4 @@ npm run icons
 - HTML/CSS
 - JSON/YAML
 - Markdown
-- і багато інших...
+- And more…
