@@ -58,15 +58,23 @@ fn quit_app(app: tauri::AppHandle) {
 }
 
 fn main() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .on_window_event(|window, event| {
             match event {
                 #[cfg(target_os = "macos")]
                 tauri::WindowEvent::CloseRequested { api, .. } => {
-                    // macOS: keep app running, just hide window
+                    // macOS: keep app running, but avoid leaving a black fullscreen space
                     api.prevent_close();
-                    let _ = window.hide();
+                    // Try to exit fullscreen before hiding, to avoid ghost/black space artifacts
+                    let _ = window.set_fullscreen(false);
+                    let _ = window.set_simple_fullscreen(false);
+                    // Hide after a short delay to give the OS time to exit fullscreen
+                    let win = window.clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(std::time::Duration::from_millis(120));
+                        let _ = win.hide();
+                    });
                 }
                 #[cfg(not(target_os = "macos"))]
                 tauri::WindowEvent::CloseRequested { api, .. } => {
@@ -152,6 +160,24 @@ fn main() {
             }
         })
         .invoke_handler(tauri::generate_handler![read_file, write_file, read_dir, create_new_file, menu_action, quit_app])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    // Handle app-level events (e.g., Dock icon click on macOS)
+    app.run(|app_handle, event| {
+        match event {
+            // macOS Dock icon clicked or app re-opened when no windows are visible
+            tauri::RunEvent::Reopen { .. } => {
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+            // Some desktop environments send a Ready / Resumed; ensure we can bring window back when needed
+            tauri::RunEvent::Ready => {
+                // no-op
+            }
+            _ => {}
+        }
+    });
 }
