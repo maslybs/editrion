@@ -15,6 +15,7 @@
 
   "context.closeOthers": "Cerrar otras",
   "context.closeRight": "Cerrar pestañas a la derecha",
+  "context.removeProject": "Eliminar proyecto",
 
   "dialog.saveFile": "Guardar archivo",
   "dialog.saveAs": "Guardar como",

@@ -15,6 +15,7 @@
 
   "context.closeOthers": "Close Others",
   "context.closeRight": "Close Tabs to the Right",
+  "context.removeProject": "Remove Project",
 
   "dialog.saveFile": "Save File",
   "dialog.saveAs": "Save As",

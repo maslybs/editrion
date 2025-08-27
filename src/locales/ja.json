@@ -15,6 +15,7 @@
 
   "context.closeOthers": "他を閉じる",
   "context.closeRight": "右側のタブを閉じる",
+  "context.removeProject": "プロジェクトを削除",
 
   "dialog.saveFile": "ファイルを保存",
   "dialog.saveAs": "名前を付けて保存",

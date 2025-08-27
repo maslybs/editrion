@@ -54,6 +54,9 @@ class Editrion {
   private ctxCloseOthersItem!: HTMLElement;
   private ctxCloseRightItem!: HTMLElement;
   private contextTargetTabId: string | null = null;
+  private sidebarContextMenu!: HTMLElement;
+  private ctxRemoveProjectItem!: HTMLElement;
+  private sidebarContextTargetPath: string | null = null;
   private projectRoots: string[] = [];
   private searchOptions = {
     caseSensitive: false,
@@ -85,6 +88,8 @@ class Editrion {
     this.tabContextMenu = document.getElementById('tab-context-menu')!;
     this.ctxCloseOthersItem = document.getElementById('ctx-close-others')!;
     this.ctxCloseRightItem = document.getElementById('ctx-close-right')!;
+    this.sidebarContextMenu = document.getElementById('sidebar-context-menu')!;
+    this.ctxRemoveProjectItem = document.getElementById('ctx-remove-project')!;
 
     // i18n dictionaries and initialization
     registerDictionaries('en', en as any);
@@ -179,6 +184,7 @@ class Editrion {
 
     // Context menu and tab scrolling
     this.setupTabContextMenu();
+    this.setupSidebarContextMenu();
 
     // Restore saved projects
     this.restoreProjects();
@@ -339,6 +345,12 @@ class Editrion {
     root.addEventListener('click', (e) => {
       e.stopPropagation();
       this.toggleFolder(root);
+    });
+    root.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.sidebarContextTargetPath = path;
+      this.showSidebarContextMenu(e.clientX, e.clientY);
     });
     this.sidebarContainer.appendChild(root);
   }
@@ -707,6 +719,55 @@ class Editrion {
   private hideTabContextMenu() {
     this.tabContextMenu.classList.add('hidden');
     this.contextTargetTabId = null;
+  }
+
+  private setupSidebarContextMenu() {
+    this.ctxRemoveProjectItem.addEventListener('click', () => {
+      if (this.sidebarContextTargetPath) {
+        this.removeProjectRoot(this.sidebarContextTargetPath);
+      }
+      this.hideSidebarContextMenu();
+    });
+
+    const dismiss = () => this.hideSidebarContextMenu();
+    document.addEventListener('click', dismiss);
+    window.addEventListener('blur', dismiss);
+    window.addEventListener('resize', dismiss);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') dismiss(); });
+  }
+
+  private showSidebarContextMenu(x: number, y: number) {
+    const menu = this.sidebarContextMenu;
+    menu.classList.remove('hidden');
+    const { innerWidth, innerHeight } = window;
+    const rect = menu.getBoundingClientRect();
+    const posX = Math.min(x, innerWidth - rect.width - 4);
+    const posY = Math.min(y, innerHeight - rect.height - 4);
+    menu.style.left = `${posX}px`;
+    menu.style.top = `${posY}px`;
+  }
+
+  private hideSidebarContextMenu() {
+    this.sidebarContextMenu.classList.add('hidden');
+    this.sidebarContextTargetPath = null;
+  }
+
+  private removeProjectRoot(path: string) {
+    // Remove UI root and its immediate subtree, if present
+    const roots = Array.from(this.sidebarContainer.querySelectorAll<HTMLElement>('[data-root="true"]'));
+    for (const el of roots) {
+      if (el.dataset.path === path) {
+        const next = el.nextElementSibling as HTMLElement | null;
+        if (next && next.classList.contains('subtree') && next.dataset.parentPath === path) {
+          next.remove();
+        }
+        el.remove();
+        break;
+      }
+    }
+    // Update list and persist
+    this.projectRoots = this.projectRoots.filter(p => p !== path);
+    this.saveProjectRoots();
   }
 
   private closeOtherTabs(keepTabId: string) {

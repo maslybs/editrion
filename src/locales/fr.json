@@ -15,6 +15,7 @@
 
   "context.closeOthers": "Fermer les autres",
   "context.closeRight": "Fermer les onglets à droite",
+  "context.removeProject": "Supprimer le projet",
 
   "dialog.saveFile": "Enregistrer le fichier",
   "dialog.saveAs": "Enregistrer sous",
