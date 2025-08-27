@@ -70,6 +70,9 @@ class Editrion {
   private customThemeVars: string[] = [];
   private draftsDir: string | null = null;
   private draftSaveTimers: Record<string, number> = {};
+  private confirmOverlay?: HTMLElement;
+  private confirmMessageEl?: HTMLElement;
+  private confirmResolve?: (v: 'save' | 'discard' | 'cancel') => void;
   
   constructor() {
     this.tabsContainer = document.getElementById('tabs')!;
@@ -196,6 +199,8 @@ class Editrion {
     } catch (e) {
       console.warn('Drafts unavailable:', e);
     }
+
+    this.initConfirmModal();
   }
 
   private async updateNativeMenuLabels() {
@@ -770,16 +775,50 @@ class Editrion {
     this.saveProjectRoots();
   }
 
-  private closeOtherTabs(keepTabId: string) {
-    const ids = this.tabs.filter(t => t.id !== keepTabId).map(t => t.id);
-    ids.forEach(id => this.closeTab(id));
+  private async closeOtherTabs(keepTabId: string) {
+    const toClose = this.tabs.filter(t => t.id !== keepTabId);
+    const dirtyCount = toClose.filter(t => t.isDirty).length;
+    if (dirtyCount > 0) {
+      const choice = await this.askUnsavedMulti(dirtyCount);
+      if (choice === 'cancel') return;
+      if (choice === 'save') {
+        for (const tab of toClose) {
+          if (tab.isDirty) {
+            await this.saveFile(tab);
+            if (tab.isDirty) return; // user cancelled a save dialog
+          }
+        }
+      } else {
+        for (const tab of toClose) {
+          if (tab.isDirty) await this.removeDraft(tab).catch(() => {});
+        }
+      }
+    }
+    toClose.map(t => t.id).forEach(id => this.doCloseTab(id));
   }
 
-  private closeTabsToRight(startTabId: string) {
+  private async closeTabsToRight(startTabId: string) {
     const idx = this.tabs.findIndex(t => t.id === startTabId);
     if (idx === -1) return;
-    const ids = this.tabs.slice(idx + 1).map(t => t.id);
-    ids.forEach(id => this.closeTab(id));
+    const toClose = this.tabs.slice(idx + 1);
+    const dirtyCount = toClose.filter(t => t.isDirty).length;
+    if (dirtyCount > 0) {
+      const choice = await this.askUnsavedMulti(dirtyCount);
+      if (choice === 'cancel') return;
+      if (choice === 'save') {
+        for (const tab of toClose) {
+          if (tab.isDirty) {
+            await this.saveFile(tab);
+            if (tab.isDirty) return;
+          }
+        }
+      } else {
+        for (const tab of toClose) {
+          if (tab.isDirty) await this.removeDraft(tab).catch(() => {});
+        }
+      }
+    }
+    toClose.map(t => t.id).forEach(id => this.doCloseTab(id));
   }
   
   private async saveFile(tab: Tab) {
@@ -999,23 +1038,35 @@ class Editrion {
     }
   }
   
-  private closeTab(tabId: string) {
+  private async closeTab(tabId: string) {
     const tabIndex = this.tabs.findIndex(tab => tab.id === tabId);
     if (tabIndex === -1) return;
     
     const tab = this.tabs[tabIndex];
-    
-    // Dispose editor
+    // If dirty, ask to save/discard via modal
+    if (tab.isDirty) {
+      const choice = await this.askUnsavedSingle(tab.name);
+      if (choice === 'cancel') return; // cancelled
+      if (choice === 'save') {
+        await this.saveFile(tab);
+        if (tab.isDirty) return; // user cancelled save
+      } else if (choice === 'discard') {
+        await this.removeDraft(tab).catch(() => {});
+      }
+    }
+    this.doCloseTab(tabId);
+  }
+
+  private doCloseTab(tabId: string) {
+    const tabIndex = this.tabs.findIndex(tab => tab.id === tabId);
+    if (tabIndex === -1) return;
+    const tab = this.tabs[tabIndex];
     if (tab.editor) {
       tab.editor.dispose();
       const element = document.getElementById(`editor-${tabId}`);
       if (element) element.remove();
     }
-    
-    // Remove tab
     this.tabs.splice(tabIndex, 1);
-    
-    // Switch to another tab if this was active
     if (this.activeTabId === tabId) {
       if (this.tabs.length > 0) {
         const newActiveIndex = Math.min(tabIndex, this.tabs.length - 1);
@@ -1024,9 +1075,17 @@ class Editrion {
         this.activeTabId = null;
       }
     }
-    
     this.renderTabs();
     this.updateWelcomeState();
+  }
+
+  // Returns true if user made a choice (save or discard), false if cancel
+  // Legacy confirm helpers removed; using modal instead
+
+  private async removeDraft(tab: Tab) {
+    if (!this.draftsDir) return;
+    const draftPath = `${this.draftsDir}/${tab.id}.json`;
+    try { await invoke('remove_file', { path: draftPath }); } catch {}
   }
   
   private setupKeyboardShortcuts() {
@@ -1257,20 +1316,23 @@ class Editrion {
   }
 
   private async handleQuitRequest() {
-    const hasDirty = this.tabs.some(t => t.isDirty);
-    if (!hasDirty) {
+    const dirtyTabs = this.tabs.filter(t => t.isDirty);
+    if (dirtyTabs.length === 0) {
       await invoke('quit_app');
       return;
     }
-    // Flush drafts for all dirty tabs
-    if (this.draftsDir) {
-      const dirty = this.tabs.filter(t => t.isDirty);
-      for (const t of dirty) {
-        try { await this.saveDraft(t); } catch {}
+    const choice = await this.askUnsavedMulti(dirtyTabs.length);
+    if (choice === 'cancel') return;
+    if (choice === 'save') {
+      for (const tab of dirtyTabs) {
+        await this.saveFile(tab);
+        if (tab.isDirty) return; // user cancelled a Save dialog
       }
+      await invoke('quit_app');
+      return;
     }
-    const deleteDrafts = confirm(t('confirm.deleteDraftsOnQuit'));
-    if (deleteDrafts && this.draftsDir) {
+    // discard
+    if (this.draftsDir) {
       try { await invoke('clear_dir', { path: this.draftsDir }); } catch {}
     }
     await invoke('quit_app');
@@ -1520,6 +1582,62 @@ class Editrion {
     } catch (e) {
       console.warn('Failed to scan drafts dir', e);
     }
+  }
+
+  // ---------- Unsaved changes confirm modal ----------
+  private initConfirmModal() {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    const msg = document.createElement('p');
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+    const btnCancel = document.createElement('button');
+    btnCancel.className = 'btn';
+    btnCancel.textContent = t('button.cancel');
+    const btnDont = document.createElement('button');
+    btnDont.className = 'btn';
+    btnDont.textContent = t('button.dontSave');
+    const btnSave = document.createElement('button');
+    btnSave.className = 'btn primary';
+    btnSave.textContent = t('button.save');
+    actions.append(btnCancel, btnDont, btnSave);
+    modal.append(msg, actions);
+    overlay.append(modal);
+    document.body.append(overlay);
+    this.confirmOverlay = overlay;
+    this.confirmMessageEl = msg;
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) this.finishConfirm('cancel');
+    });
+    btnSave.addEventListener('click', () => this.finishConfirm('save'));
+    btnDont.addEventListener('click', () => this.finishConfirm('discard'));
+    btnCancel.addEventListener('click', () => this.finishConfirm('cancel'));
+    document.addEventListener('keydown', (e) => {
+      if (!this.confirmOverlay || !this.confirmOverlay.classList.contains('show')) return;
+      if (e.key === 'Escape') this.finishConfirm('cancel');
+    });
+  }
+
+  private finishConfirm(choice: 'save' | 'discard' | 'cancel') {
+    if (this.confirmOverlay) this.confirmOverlay.classList.remove('show');
+    if (this.confirmResolve) this.confirmResolve(choice);
+    this.confirmResolve = undefined;
+  }
+
+  private async askUnsavedSingle(name: string): Promise<'save' | 'discard' | 'cancel'> {
+    if (!this.confirmOverlay || !this.confirmMessageEl) return 'cancel';
+    this.confirmMessageEl.textContent = t('confirm.unsavedSingle', { name });
+    this.confirmOverlay.classList.add('show');
+    return new Promise(resolve => { this.confirmResolve = resolve; });
+  }
+
+  private async askUnsavedMulti(count: number): Promise<'save' | 'discard' | 'cancel'> {
+    if (!this.confirmOverlay || !this.confirmMessageEl) return 'cancel';
+    this.confirmMessageEl.textContent = t('confirm.unsavedMulti', { count });
+    this.confirmOverlay.classList.add('show');
+    return new Promise(resolve => { this.confirmResolve = resolve; });
   }
 }
 

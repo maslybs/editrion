@@ -71,5 +71,14 @@
   "menu.item.lang.de": "Deutsch"
   ,
   "confirm.deleteDraftsOnQuit": "Delete all unsaved drafts and quit?",
-  "info.restoredDrafts": "Restored unsaved changes from previous session."
+  "info.restoredDrafts": "Restored unsaved changes from previous session.",
+  "confirm.saveFile": "Save changes to this file?",
+  "confirm.discardFile": "Discard changes to this file?",
+  "confirm.saveAll": "Save changes in {count} tabs before closing?",
+  "confirm.discardAll": "Discard changes in {count} tabs?",
+  "confirm.unsavedSingle": "Save changes to \"{name}\"?",
+  "confirm.unsavedMulti": "Save changes in {count} tabs before closing?",
+  "button.save": "Save",
+  "button.dontSave": "Don't Save",
+  "button.cancel": "Cancel"
 }

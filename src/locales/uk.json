@@ -71,5 +71,14 @@
   "menu.item.lang.de": "Deutsch"
   ,
   "confirm.deleteDraftsOnQuit": "Видалити всі незбережені чернетки та вийти?",
-  "info.restoredDrafts": "Відновлено незбережені зміни з попереднього сеансу."
+  "info.restoredDrafts": "Відновлено незбережені зміни з попереднього сеансу.",
+  "confirm.saveFile": "Зберегти зміни у цьому файлі?",
+  "confirm.discardFile": "Відхилити зміни у цьому файлі?",
+  "confirm.saveAll": "Зберегти зміни у {count} вкладках перед закриттям?",
+  "confirm.discardAll": "Відхилити зміни у {count} вкладках?",
+  "confirm.unsavedSingle": "Зберегти зміни у \"{name}\"?",
+  "confirm.unsavedMulti": "Зберегти зміни у {count} вкладках перед закриттям?",
+  "button.save": "Зберегти",
+  "button.dontSave": "Не зберігати",
+  "button.cancel": "Скасувати"
 }

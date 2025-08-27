@@ -70,5 +70,14 @@
   "menu.item.lang.ja": "日本語",
   "menu.item.lang.de": "Deutsch",
   "confirm.deleteDraftsOnQuit": "Supprimer tous les brouillons non enregistrés et quitter ?",
-  "info.restoredDrafts": "Modifications non enregistrées restaurées depuis la session précédente."
+  "info.restoredDrafts": "Modifications non enregistrées restaurées depuis la session précédente.",
+  "confirm.saveFile": "Enregistrer les modifications de ce fichier ?",
+  "confirm.discardFile": "Ignorer les modifications de ce fichier ?",
+  "confirm.saveAll": "Enregistrer les modifications dans {count} onglets avant de fermer ?",
+  "confirm.discardAll": "Ignorer les modifications dans {count} onglets ?",
+  "confirm.unsavedSingle": "Enregistrer les modifications de \"{name}\" ?",
+  "confirm.unsavedMulti": "Enregistrer les modifications dans {count} onglets avant de fermer ?",
+  "button.save": "Enregistrer",
+  "button.dontSave": "Ne pas enregistrer",
+  "button.cancel": "Annuler"
 }

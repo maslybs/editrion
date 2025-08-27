@@ -71,5 +71,14 @@
   "menu.item.lang.de": "Deutsch"
   ,
   "confirm.deleteDraftsOnQuit": "Alle ungespeicherten Entwürfe löschen und beenden?",
-  "info.restoredDrafts": "Ungespeicherte Änderungen aus der letzten Sitzung wurden wiederhergestellt."
+  "info.restoredDrafts": "Ungespeicherte Änderungen aus der letzten Sitzung wurden wiederhergestellt.",
+  "confirm.saveFile": "Änderungen in dieser Datei speichern?",
+  "confirm.discardFile": "Änderungen in dieser Datei verwerfen?",
+  "confirm.saveAll": "Änderungen in {count} Tabs vor dem Schließen speichern?",
+  "confirm.discardAll": "Änderungen in {count} Tabs verwerfen?",
+  "confirm.unsavedSingle": "Änderungen in \"{name}\" speichern?",
+  "confirm.unsavedMulti": "Änderungen in {count} Tabs vor dem Schließen speichern?",
+  "button.save": "Speichern",
+  "button.dontSave": "Nicht speichern",
+  "button.cancel": "Abbrechen"
 }

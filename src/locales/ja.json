@@ -70,5 +70,14 @@
   "menu.item.lang.ja": "日本語",
   "menu.item.lang.de": "Deutsch",
   "confirm.deleteDraftsOnQuit": "未保存の下書きをすべて削除して終了しますか？",
-  "info.restoredDrafts": "前回のセッションの未保存の変更を復元しました。"
+  "info.restoredDrafts": "前回のセッションの未保存の変更を復元しました。",
+  "confirm.saveFile": "このファイルの変更を保存しますか？",
+  "confirm.discardFile": "このファイルの変更を破棄しますか？",
+  "confirm.saveAll": "閉じる前に {count} 個のタブの変更を保存しますか？",
+  "confirm.discardAll": "{count} 個のタブの変更を破棄しますか？",
+  "confirm.unsavedSingle": "\"{name}\" の変更を保存しますか？",
+  "confirm.unsavedMulti": "閉じる前に {count} 個のタブの変更を保存しますか？",
+  "button.save": "保存",
+  "button.dontSave": "保存しない",
+  "button.cancel": "キャンセル"
 }

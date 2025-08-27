@@ -70,5 +70,14 @@
   "menu.item.lang.ja": "日本語",
   "menu.item.lang.de": "Deutsch",
   "confirm.deleteDraftsOnQuit": "¿Eliminar todos los borradores sin guardar y salir?",
-  "info.restoredDrafts": "Se restauraron los cambios no guardados de la sesión anterior."
+  "info.restoredDrafts": "Se restauraron los cambios no guardados de la sesión anterior.",
+  "confirm.saveFile": "¿Guardar los cambios de este archivo?",
+  "confirm.discardFile": "¿Descartar los cambios de este archivo?",
+  "confirm.saveAll": "¿Guardar los cambios en {count} pestañas antes de cerrar?",
+  "confirm.discardAll": "¿Descartar los cambios en {count} pestañas?",
+  "confirm.unsavedSingle": "¿Guardar los cambios de \"{name}\"?",
+  "confirm.unsavedMulti": "¿Guardar los cambios en {count} pestañas antes de cerrar?",
+  "button.save": "Guardar",
+  "button.dontSave": "No guardar",
+  "button.cancel": "Cancelar"
 }
