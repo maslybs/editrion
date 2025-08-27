@@ -118,20 +118,23 @@ body {
   overflow-x: auto;
   min-height: 35px;
   scrollbar-width: thin;
+  position: relative;
+  padding-right: 28px; /* leave room for overflow button */
 }
 
 .tab {
   background-color: var(--tab-inactive-bg);
   color: var(--tab-inactive-text);
-  padding: 8px 16px;
+  padding: 8px 12px;
   cursor: pointer;
   border-right: 1px solid var(--button-hover-bg);
   white-space: nowrap;
   display: flex;
   align-items: center;
   font-size: 12px;
-  flex-shrink: 0;
-  min-width: 120px;
+  /* Allow tabs to shrink when many tabs are open */
+  flex: 0 1 180px;
+  min-width: 0; /* allow child to control min width */
 }
 
 .tab.active {
@@ -147,11 +150,28 @@ body {
   margin-left: 8px;
   cursor: pointer;
   opacity: 0.7;
+  flex: 0 0 auto; /* keep close button visible */
 }
 
 .tab .close:hover {
   opacity: 1;
 }
+
+.tabs-overflow-btn {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  height: 26px;
+  width: 26px;
+  border-radius: 4px;
+  border: 1px solid var(--panel-border);
+  background: var(--button-bg);
+  color: var(--text);
+  cursor: pointer;
+  z-index: 5;
+}
+
+.tabs-overflow-btn:hover { filter: brightness(1.08); }
 
 .editor-container {
   flex: 1;
@@ -178,6 +198,15 @@ body {
 .monaco-editor {
   width: 100% !important;
   height: 100% !important;
+}
+
+/* Tab title should truncate with ellipsis and be shrinkable to 1ch */
+.tab span:not(.close) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 auto;
+  min-width: 1ch;
 }
 
 /* File tree styles */

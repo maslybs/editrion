@@ -57,6 +57,8 @@ class Editrion {
   private sidebarContextMenu!: HTMLElement;
   private ctxRemoveProjectItem!: HTMLElement;
   private sidebarContextTargetPath: string | null = null;
+  private tabsOverflowBtn!: HTMLButtonElement;
+  private tabsOverflowMenu!: HTMLElement;
   private projectRoots: string[] = [];
   private searchOptions = {
     caseSensitive: false,
@@ -93,6 +95,8 @@ class Editrion {
     this.ctxCloseRightItem = document.getElementById('ctx-close-right')!;
     this.sidebarContextMenu = document.getElementById('sidebar-context-menu')!;
     this.ctxRemoveProjectItem = document.getElementById('ctx-remove-project')!;
+    this.tabsOverflowBtn = document.getElementById('tabs-overflow-btn') as HTMLButtonElement;
+    this.tabsOverflowMenu = document.getElementById('tabs-overflow-menu')!;
 
     // i18n dictionaries and initialization
     registerDictionaries('en', en as any);
@@ -188,6 +192,7 @@ class Editrion {
     // Context menu and tab scrolling
     this.setupTabContextMenu();
     this.setupSidebarContextMenu();
+    this.setupTabsOverflowMenu();
 
     // Restore saved projects
     this.restoreProjects();
@@ -488,6 +493,7 @@ class Editrion {
       const titleSpan = document.createElement('span');
       // Avoid XSS by using textContent instead of innerHTML
       titleSpan.textContent = tab.name + (tab.isDirty ? ' •' : '');
+      titleSpan.title = tab.path;
 
       const closeSpan = document.createElement('span');
       closeSpan.className = 'close';
@@ -773,6 +779,64 @@ class Editrion {
     // Update list and persist
     this.projectRoots = this.projectRoots.filter(p => p !== path);
     this.saveProjectRoots();
+  }
+
+  private setupTabsOverflowMenu() {
+    const hide = () => this.hideTabsOverflowMenu();
+    this.tabsOverflowBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.populateTabsOverflowMenu();
+      const rect = this.tabsOverflowBtn.getBoundingClientRect();
+      this.showTabsOverflowMenu(rect.left, rect.bottom + 4);
+    });
+    document.addEventListener('click', hide);
+    window.addEventListener('blur', hide);
+    window.addEventListener('resize', hide);
+  }
+
+  private populateTabsOverflowMenu() {
+    const menu = this.tabsOverflowMenu;
+    menu.innerHTML = '';
+    for (const tab of this.tabs) {
+      const item = document.createElement('div');
+      item.className = 'context-menu-item';
+      const title = `${tab.name}${tab.isDirty ? ' •' : ''}`;
+      item.textContent = title;
+      item.title = tab.path;
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.switchToTab(tab.id);
+        this.hideTabsOverflowMenu();
+      });
+      // Add close control on the right
+      const close = document.createElement('span');
+      close.textContent = '✕';
+      close.style.float = 'right';
+      close.style.opacity = '0.8';
+      close.style.marginLeft = '8px';
+      close.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await this.closeTab(tab.id);
+        this.populateTabsOverflowMenu();
+      });
+      item.appendChild(close);
+      menu.appendChild(item);
+    }
+  }
+
+  private showTabsOverflowMenu(x: number, y: number) {
+    const menu = this.tabsOverflowMenu;
+    menu.classList.remove('hidden');
+    const { innerWidth, innerHeight } = window;
+    const rect = menu.getBoundingClientRect();
+    const posX = Math.min(x, innerWidth - rect.width - 4);
+    const posY = Math.min(y, innerHeight - rect.height - 4);
+    menu.style.left = `${posX}px`;
+    menu.style.top = `${posY}px`;
+  }
+
+  private hideTabsOverflowMenu() {
+    this.tabsOverflowMenu.classList.add('hidden');
   }
 
   private async closeOtherTabs(keepTabId: string) {
