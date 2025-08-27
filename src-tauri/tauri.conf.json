@@ -1,5 +1,5 @@
 {
-  "productName": "Editrion",
+  "productName": "Editrion (Beta)",
   "version": "1.0.0",
   "identifier": "com.editrion.editor",
   "build": {
@@ -13,7 +13,7 @@
       {
         "fullscreen": false,
         "resizable": true,
-        "title": "Editrion",
+        "title": "Editrion - Text editor (Beta)",
         "width": 1200,
         "height": 800,
         "minWidth": 800,

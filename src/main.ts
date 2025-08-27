@@ -2,6 +2,11 @@ import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { listen } from '@tauri-apps/api/event';
 import * as monaco from 'monaco-editor';
+// Enable language features (formatting, diagnostics) for common languages
+import 'monaco-editor/esm/vs/language/json/monaco.contribution';
+import 'monaco-editor/esm/vs/language/css/monaco.contribution';
+import 'monaco-editor/esm/vs/language/html/monaco.contribution';
+import 'monaco-editor/esm/vs/language/typescript/monaco.contribution';
 import './style.css';
 
 interface FileItem {
@@ -437,6 +442,8 @@ class Editrion {
       folding: true,
       renderWhitespace: 'selection',
       multiCursorModifier: 'ctrlCmd',
+      formatOnPaste: true,
+      formatOnType: true,
       selectionHighlight: true,
       occurrencesHighlight: 'singleFile',
       find: {
@@ -466,6 +473,11 @@ class Editrion {
     // Custom search on Cmd+F / Ctrl+F
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, () => {
       this.showSearch();
+    });
+
+    // Format document on Shift+Alt+F (standard Monaco/VS Code binding)
+    editor.addCommand(monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF, () => {
+      editor.getAction('editor.action.formatDocument')?.run();
     });
     
     tab.editor = editor;

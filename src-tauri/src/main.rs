@@ -96,7 +96,7 @@ fn main() {
             let save_as = MenuItem::with_id(app, "save_as", "Save As…", true, Some("CmdOrCtrl+Shift+S"))?;
             let close_tab = MenuItem::with_id(app, "close_tab", "Close Tab", true, Some("CmdOrCtrl+W"))?;
             
-            let quit_custom = MenuItem::with_id(app, "quit_app", "Quit Editrion", true, Some("CmdOrCtrl+Q"))?;
+            let quit_custom = MenuItem::with_id(app, "quit_app", "Quit Editrion (Beta)", true, Some("CmdOrCtrl+Q"))?;
             let file_menu = Submenu::with_items(app, "File", true, &[
                 &new_file,
                 &open_file, 
