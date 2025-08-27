@@ -153,9 +153,17 @@ fn main() {
             // Settings -> Language
             let lang_en = MenuItem::with_id(app, "language_en", "Language: English", true, None::<&str>)?;
             let lang_uk = MenuItem::with_id(app, "language_uk", "Language: Українська", true, None::<&str>)?;
+            let lang_es = MenuItem::with_id(app, "language_es", "Language: Español", true, None::<&str>)?;
+            let lang_fr = MenuItem::with_id(app, "language_fr", "Language: Français", true, None::<&str>)?;
+            let lang_ja = MenuItem::with_id(app, "language_ja", "Language: 日本語", true, None::<&str>)?;
+            let lang_de = MenuItem::with_id(app, "language_de", "Language: Deutsch", true, None::<&str>)?;
             let language_submenu = Submenu::with_items(app, "Language", true, &[
                 &lang_en,
                 &lang_uk,
+                &lang_es,
+                &lang_fr,
+                &lang_ja,
+                &lang_de,
             ])?;
             let settings_menu = Submenu::with_items(app, "Settings", true, &[
                 &language_submenu,
@@ -282,9 +290,17 @@ fn rebuild_menu(app: tauri::AppHandle, labels: HashMap<String, String>) -> Resul
     // Settings -> Language
     let lang_en = MenuItem::with_id(&app, "language_en", &g("menu.item.lang.en"), true, None::<&str>).map_err(|e| e.to_string())?;
     let lang_uk = MenuItem::with_id(&app, "language_uk", &g("menu.item.lang.uk"), true, None::<&str>).map_err(|e| e.to_string())?;
+    let lang_es = MenuItem::with_id(&app, "language_es", &g("menu.item.lang.es"), true, None::<&str>).map_err(|e| e.to_string())?;
+    let lang_fr = MenuItem::with_id(&app, "language_fr", &g("menu.item.lang.fr"), true, None::<&str>).map_err(|e| e.to_string())?;
+    let lang_ja = MenuItem::with_id(&app, "language_ja", &g("menu.item.lang.ja"), true, None::<&str>).map_err(|e| e.to_string())?;
+    let lang_de = MenuItem::with_id(&app, "language_de", &g("menu.item.lang.de"), true, None::<&str>).map_err(|e| e.to_string())?;
     let language_submenu = Submenu::with_items(&app, &g("menu.language"), true, &[
         &lang_en,
         &lang_uk,
+        &lang_es,
+        &lang_fr,
+        &lang_ja,
+        &lang_de,
     ]).map_err(|e| e.to_string())?;
     let settings_menu = Submenu::with_items(&app, &g("menu.settings"), true, &[
         &language_submenu,

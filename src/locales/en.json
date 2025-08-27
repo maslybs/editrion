@@ -63,5 +63,9 @@
   "menu.item.window.show": "Show Window",
 
   "menu.item.lang.en": "English",
-  "menu.item.lang.uk": "Українська"
+  "menu.item.lang.uk": "Українська",
+  "menu.item.lang.es": "Español",
+  "menu.item.lang.fr": "Français",
+  "menu.item.lang.ja": "日本語",
+  "menu.item.lang.de": "Deutsch"
 }

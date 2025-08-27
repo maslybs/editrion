@@ -11,6 +11,10 @@ import './style.css';
 import { initI18n, setLocale, t, registerDictionaries, applyTranslations } from './i18n';
 import en from './locales/en.json';
 import uk from './locales/uk.json';
+import es from './locales/es.json';
+import fr from './locales/fr.json';
+import ja from './locales/ja.json';
+import de from './locales/de.json';
 
 interface FileItem {
   name: string;
@@ -83,6 +87,10 @@ class Editrion {
     // i18n dictionaries and initialization
     registerDictionaries('en', en as any);
     registerDictionaries('uk', uk as any);
+    registerDictionaries('es', es as any);
+    registerDictionaries('fr', fr as any);
+    registerDictionaries('ja', ja as any);
+    registerDictionaries('de', de as any);
     initI18n();
     applyTranslations();
 
@@ -212,6 +220,10 @@ class Editrion {
 
       'menu.item.lang.en': t('menu.item.lang.en'),
       'menu.item.lang.uk': t('menu.item.lang.uk'),
+      'menu.item.lang.es': t('menu.item.lang.es'),
+      'menu.item.lang.fr': t('menu.item.lang.fr'),
+      'menu.item.lang.ja': t('menu.item.lang.ja'),
+      'menu.item.lang.de': t('menu.item.lang.de'),
     } as Record<string, string>;
     try {
       await invoke('rebuild_menu', { labels });
@@ -1126,6 +1138,26 @@ class Editrion {
           break;
         case 'language_uk':
           setLocale('uk');
+          applyTranslations();
+          this.updateNativeMenuLabels();
+          break;
+        case 'language_es':
+          setLocale('es');
+          applyTranslations();
+          this.updateNativeMenuLabels();
+          break;
+        case 'language_fr':
+          setLocale('fr');
+          applyTranslations();
+          this.updateNativeMenuLabels();
+          break;
+        case 'language_ja':
+          setLocale('ja');
+          applyTranslations();
+          this.updateNativeMenuLabels();
+          break;
+        case 'language_de':
+          setLocale('de');
           applyTranslations();
           this.updateNativeMenuLabels();
           break;

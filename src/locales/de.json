@@ -1,0 +1,71 @@
+{
+  "app.title": "Editrion - Texteditor (Beta)",
+  "sidebar.projects": "Projekte",
+  "sidebar.addFolder": "＋ Ordner hinzufügen",
+  "welcome.title": "Willkommen bei Editrion (Beta)",
+  "welcome.subtitle": "Öffne eine Datei oder füge einen Ordner hinzu, um zu starten.",
+  "welcome.openFile": "Datei öffnen",
+  "welcome.addFolder": "Ordner hinzufügen",
+
+  "search.placeholder": "Suchen...",
+  "search.findAll": "Alle suchen",
+  "search.invalidRegex": "Ungültiger regulärer Ausdruck",
+  "search.matches": "{count} Treffer",
+  "search.showingNote": " (zeige {count})",
+
+  "context.closeOthers": "Andere schließen",
+  "context.closeRight": "Tabs rechts schließen",
+
+  "dialog.saveFile": "Datei speichern",
+  "dialog.saveAs": "Speichern unter",
+  "dialog.openFile": "Datei öffnen",
+  "dialog.openFolder": "Ordner öffnen",
+
+  "prompt.enterFilePathToSave": "Dateipfad zum Speichern eingeben:",
+  "prompt.enterFilePathToOpen": "Dateipfad zum Öffnen eingeben:",
+  "prompt.enterFolderPathToOpen": "Ordnerpfad zum Öffnen eingeben:",
+
+  "alert.failedToLoadCustomTheme": "Benutzerdefiniertes Theme konnte nicht geladen werden. Bitte JSON-Format prüfen.",
+  "alert.failedToOpenFile": "Datei konnte nicht geöffnet werden: {error}",
+
+  "common.untitled": "Ohne Titel",
+  "ui.language": "Sprache",
+
+  "menu.file": "Datei",
+  "menu.edit": "Bearbeiten",
+  "menu.view": "Ansicht",
+  "menu.window": "Fenster",
+  "menu.settings": "Einstellungen",
+  "menu.language": "Sprache",
+  "menu.theme": "Theme",
+
+  "menu.item.newFile": "Neue Datei",
+  "menu.item.openFile": "Datei öffnen...",
+  "menu.item.openFolder": "Ordner öffnen...",
+  "menu.item.save": "Speichern",
+  "menu.item.saveAs": "Speichern unter…",
+  "menu.item.closeTab": "Tab schließen",
+  "menu.item.quit": "Editrion (Beta) beenden",
+
+  "menu.item.find": "Suchen",
+  "menu.item.replace": "Ersetzen",
+  "menu.item.selectAllOccurrences": "Alle Vorkommen auswählen",
+  "menu.item.undo": "Rückgängig",
+  "menu.item.redo": "Wiederholen",
+  "menu.item.cut": "Ausschneiden",
+  "menu.item.copy": "Kopieren",
+  "menu.item.paste": "Einfügen",
+
+  "menu.item.theme.dark": "Dunkel",
+  "menu.item.theme.light": "Hell",
+  "menu.item.theme.loadCustom": "Benutzerdefiniertes laden…",
+
+  "menu.item.window.show": "Fenster anzeigen",
+
+  "menu.item.lang.en": "English",
+  "menu.item.lang.uk": "Українська",
+  "menu.item.lang.es": "Español",
+  "menu.item.lang.fr": "Français",
+  "menu.item.lang.ja": "日本語",
+  "menu.item.lang.de": "Deutsch"
+}

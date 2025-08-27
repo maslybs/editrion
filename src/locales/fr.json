@@ -1,0 +1,70 @@
+{
+  "app.title": "Editrion - Éditeur de texte (Bêta)",
+  "sidebar.projects": "Projets",
+  "sidebar.addFolder": "＋ Ajouter un dossier",
+  "welcome.title": "Bienvenue dans Editrion (Bêta)",
+  "welcome.subtitle": "Ouvrez un fichier ou ajoutez un dossier pour commencer.",
+  "welcome.openFile": "Ouvrir un fichier",
+  "welcome.addFolder": "Ajouter un dossier",
+
+  "search.placeholder": "Rechercher...",
+  "search.findAll": "Tout rechercher",
+  "search.invalidRegex": "Expression régulière invalide",
+  "search.matches": "{count} occurrences",
+  "search.showingNote": " (affiche {count})",
+
+  "context.closeOthers": "Fermer les autres",
+  "context.closeRight": "Fermer les onglets à droite",
+
+  "dialog.saveFile": "Enregistrer le fichier",
+  "dialog.saveAs": "Enregistrer sous",
+  "dialog.openFile": "Ouvrir un fichier",
+  "dialog.openFolder": "Ouvrir un dossier",
+
+  "prompt.enterFilePathToSave": "Entrez le chemin du fichier à enregistrer:",
+  "prompt.enterFilePathToOpen": "Entrez le chemin du fichier à ouvrir:",
+  "prompt.enterFolderPathToOpen": "Entrez le chemin du dossier à ouvrir:",
+
+  "alert.failedToLoadCustomTheme": "Échec du chargement du thème personnalisé. Veuillez vérifier le format JSON.",
+  "alert.failedToOpenFile": "Échec de l'ouverture du fichier: {error}",
+
+  "common.untitled": "Sans titre",
+  "ui.language": "Langue",
+
+  "menu.file": "Fichier",
+  "menu.edit": "Édition",
+  "menu.view": "Affichage",
+  "menu.window": "Fenêtre",
+  "menu.settings": "Paramètres",
+  "menu.language": "Langue",
+  "menu.theme": "Thème",
+
+  "menu.item.newFile": "Nouveau fichier",
+  "menu.item.openFile": "Ouvrir un fichier...",
+  "menu.item.openFolder": "Ouvrir un dossier...",
+  "menu.item.save": "Enregistrer",
+  "menu.item.saveAs": "Enregistrer sous…",
+  "menu.item.closeTab": "Fermer l’onglet",
+  "menu.item.quit": "Quitter Editrion (Bêta)",
+
+  "menu.item.find": "Rechercher",
+  "menu.item.replace": "Remplacer",
+  "menu.item.selectAllOccurrences": "Sélectionner toutes les occurrences",
+  "menu.item.undo": "Annuler",
+  "menu.item.redo": "Rétablir",
+  "menu.item.cut": "Couper",
+  "menu.item.copy": "Copier",
+  "menu.item.paste": "Coller",
+
+  "menu.item.theme.dark": "Sombre",
+  "menu.item.theme.light": "Clair",
+  "menu.item.theme.loadCustom": "Charger un thème personnalisé…",
+
+  "menu.item.window.show": "Afficher la fenêtre",
+
+  "menu.item.lang.en": "English",
+  "menu.item.lang.uk": "Українська",
+  "menu.item.lang.es": "Español",
+  "menu.item.lang.fr": "Français",
+  "menu.item.lang.ja": "日本語"
+}

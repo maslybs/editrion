@@ -1,11 +1,17 @@
 type Dict = Record<string, string>;
 
+type Locale = 'en' | 'uk' | 'es' | 'fr' | 'ja' | 'de';
+
 const dictionaries: Record<string, Dict> = {
   en: {},
   uk: {},
+  es: {},
+  fr: {},
+  ja: {},
+  de: {},
 };
 
-let currentLocale: 'en' | 'uk' = 'en';
+let currentLocale: Locale = 'en';
 
 function loadDictionaries() {
   // Static import to avoid async complexity; Vite supports JSON imports, but keeping
@@ -17,13 +23,14 @@ export function initI18n() {
   loadDictionaries();
   const saved = localStorage.getItem('editrion.locale');
   const nav = (navigator.language || 'en').toLowerCase();
-  const guess: 'en' | 'uk' = saved === 'uk' || saved === 'en'
-    ? (saved as any)
-    : (nav.startsWith('uk') ? 'uk' : 'en');
+  const candidates: Locale[] = ['uk', 'es', 'fr', 'ja', 'de', 'en'];
+  const guess: Locale = (['en', 'uk', 'es', 'fr', 'ja', 'de'] as const).includes((saved as any))
+    ? (saved as Locale)
+    : (candidates.find(c => nav.startsWith(c)) || 'en');
   setLocale(guess);
 }
 
-export function setLocale(locale: 'en' | 'uk') {
+export function setLocale(locale: Locale) {
   currentLocale = locale;
   localStorage.setItem('editrion.locale', locale);
   document.documentElement.lang = locale;
@@ -36,7 +43,7 @@ export function getLocale() {
   return currentLocale;
 }
 
-export function registerDictionaries(locale: 'en' | 'uk', dict: Dict) {
+export function registerDictionaries(locale: Locale, dict: Dict) {
   dictionaries[locale] = dict;
 }
 
@@ -81,4 +88,3 @@ export function applyTranslations(root: Document | HTMLElement = document) {
     document.title = t(titleKey);
   }
 }
-
