@@ -1,0 +1,53 @@
+name: Build Tauri (macOS & Windows)
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Windows dependencies (NSIS)
+        if: runner.os == 'Windows'
+        run: choco install nsis -y
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Build Tauri app
+        run: npm run tauri build
+        env:
+          CI: true
+
+      - name: Upload bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: tauri-bundles-${{ runner.os }}
+          path: |
+            src-tauri/target/release/bundle/**
+
