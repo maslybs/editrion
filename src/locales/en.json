@@ -68,4 +68,7 @@
   "menu.item.lang.fr": "Français",
   "menu.item.lang.ja": "日本語",
   "menu.item.lang.de": "Deutsch"
+  ,
+  "confirm.deleteDraftsOnQuit": "Delete all unsaved drafts and quit?",
+  "info.restoredDrafts": "Restored unsaved changes from previous session."
 }

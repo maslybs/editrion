@@ -66,5 +66,8 @@
   "menu.item.lang.uk": "Українська",
   "menu.item.lang.es": "Español",
   "menu.item.lang.fr": "Français",
-  "menu.item.lang.ja": "日本語"
+  "menu.item.lang.ja": "日本語",
+  "menu.item.lang.de": "Deutsch",
+  "confirm.deleteDraftsOnQuit": "¿Eliminar todos los borradores sin guardar y salir?",
+  "info.restoredDrafts": "Se restauraron los cambios no guardados de la sesión anterior."
 }

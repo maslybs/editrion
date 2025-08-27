@@ -65,6 +65,8 @@ class Editrion {
   private readonly maxSearchHighlights = 500;
   private uiTheme: 'dark' | 'light' | 'custom' = 'dark';
   private customThemeVars: string[] = [];
+  private draftsDir: string | null = null;
+  private draftSaveTimers: Record<string, number> = {};
   
   constructor() {
     this.tabsContainer = document.getElementById('tabs')!;
@@ -180,6 +182,14 @@ class Editrion {
 
     // Restore saved projects
     this.restoreProjects();
+
+    // Prepare drafts directory and try restoring drafts
+    try {
+      this.draftsDir = await invoke<string>('drafts_dir');
+      await this.restoreDrafts();
+    } catch (e) {
+      console.warn('Drafts unavailable:', e);
+    }
   }
 
   private async updateNativeMenuLabels() {
@@ -535,6 +545,14 @@ class Editrion {
       if (tab.isDirty !== wasDirty) {
         this.renderTabs();
       }
+      if (this.draftsDir) {
+        if (this.draftSaveTimers[tab.id]) {
+          clearTimeout(this.draftSaveTimers[tab.id]);
+        }
+        this.draftSaveTimers[tab.id] = window.setTimeout(() => {
+          this.saveDraft(tab).catch(err => console.warn('Failed to save draft', err));
+        }, 400);
+      }
     });
     
     // Save on Cmd+S / Ctrl+S
@@ -763,6 +781,10 @@ class Editrion {
       tab.originalContent = content;
       tab.isDirty = false;
       this.renderTabs();
+      if (this.draftsDir) {
+        const draftPath = `${this.draftsDir}/${tab.id}.json`;
+        try { await invoke('remove_file', { path: draftPath }); } catch {}
+      }
     } catch (error) {
       console.error('Failed to save file:', error);
     }
@@ -808,6 +830,10 @@ class Editrion {
       tab.originalContent = content;
       tab.isDirty = false;
       this.renderTabs();
+      if (this.draftsDir) {
+        const draftPath = `${this.draftsDir}/${tab.id}.json`;
+        try { await invoke('remove_file', { path: draftPath }); } catch {}
+      }
     } catch (error) {
       console.error('Failed to save as:', error);
     }
@@ -1175,10 +1201,18 @@ class Editrion {
       await invoke('quit_app');
       return;
     }
-    const confirmQuit = confirm('You have unsaved changes. Quit without saving?');
-    if (confirmQuit) {
-      await invoke('quit_app');
+    // Flush drafts for all dirty tabs
+    if (this.draftsDir) {
+      const dirty = this.tabs.filter(t => t.isDirty);
+      for (const t of dirty) {
+        try { await this.saveDraft(t); } catch {}
+      }
     }
+    const deleteDrafts = confirm(t('confirm.deleteDraftsOnQuit'));
+    if (deleteDrafts && this.draftsDir) {
+      try { await invoke('clear_dir', { path: this.draftsDir }); } catch {}
+    }
+    await invoke('quit_app');
   }
   
   private toggleSearchOption(option: keyof typeof this.searchOptions) {
@@ -1380,6 +1414,51 @@ class Editrion {
   // Utils
   private escapeRegExp(text: string): string {
     return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  private getDraftPath(tabId: string) {
+    return this.draftsDir ? `${this.draftsDir}/${tabId}.json` : null;
+  }
+
+  private async saveDraft(tab: Tab) {
+    if (!this.draftsDir || !tab.editor) return;
+    const draftPath = this.getDraftPath(tab.id);
+    if (!draftPath) return;
+    const payload = {
+      id: tab.id,
+      name: tab.name,
+      path: tab.path,
+      content: tab.editor.getValue(),
+      ts: Date.now()
+    };
+    await invoke('write_file', { path: draftPath, content: JSON.stringify(payload) });
+  }
+
+  private async restoreDrafts() {
+    if (!this.draftsDir) return;
+    try {
+      const entries: { name: string; path: string; is_dir: boolean }[] = await invoke('read_dir', { path: this.draftsDir });
+      const files = entries.filter(e => !e.is_dir && e.name.endsWith('.json'));
+      if (!files.length) return;
+      for (const f of files) {
+        try {
+          const raw = await invoke<string>('read_file', { path: f.path });
+          const draft = JSON.parse(raw) as { id: string; name: string; path: string; content: string };
+          const tabId = draft.id || ((crypto as any).randomUUID?.() ?? Date.now().toString());
+          const name = draft.name || this.basename(draft.path || '') || t('common.untitled');
+          const tab: Tab = { id: tabId, name, path: draft.path || name, isDirty: true, originalContent: '' };
+          this.tabs.push(tab);
+          this.renderTabs();
+          this.createEditor(tab, draft.content || '');
+        } catch (e) {
+          console.warn('Failed to restore draft', f.path, e);
+        }
+      }
+      this.updateWelcomeState();
+      alert(t('info.restoredDrafts'));
+    } catch (e) {
+      console.warn('Failed to scan drafts dir', e);
+    }
   }
 }
 

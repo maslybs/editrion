@@ -66,5 +66,8 @@
   "menu.item.lang.uk": "Українська",
   "menu.item.lang.es": "Español",
   "menu.item.lang.fr": "Français",
-  "menu.item.lang.ja": "日本語"
+  "menu.item.lang.ja": "日本語",
+  "menu.item.lang.de": "Deutsch",
+  "confirm.deleteDraftsOnQuit": "未保存の下書きをすべて削除して終了しますか？",
+  "info.restoredDrafts": "前回のセッションの未保存の変更を復元しました。"
 }

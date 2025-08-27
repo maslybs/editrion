@@ -68,4 +68,7 @@
   "menu.item.lang.fr": "Français",
   "menu.item.lang.ja": "日本語",
   "menu.item.lang.de": "Deutsch"
+  ,
+  "confirm.deleteDraftsOnQuit": "Видалити всі незбережені чернетки та вийти?",
+  "info.restoredDrafts": "Відновлено незбережені зміни з попереднього сеансу."
 }

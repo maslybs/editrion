@@ -3,6 +3,7 @@
 
 use tauri::{Emitter, Manager};
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 #[tauri::command]
 fn read_file(path: String) -> Result<String, String> {
@@ -56,6 +57,37 @@ async fn menu_action(window: tauri::Window, action: String) {
 #[tauri::command]
 fn quit_app(app: tauri::AppHandle) {
     app.exit(0);
+}
+
+#[tauri::command]
+fn drafts_dir(app: tauri::AppHandle) -> Result<String, String> {
+    let base: PathBuf = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
+    let drafts = base.join("drafts");
+    std::fs::create_dir_all(&drafts).map_err(|e| e.to_string())?;
+    Ok(drafts.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn remove_file(path: String) -> Result<(), String> {
+    match std::fs::remove_file(&path) {
+        Ok(_) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+fn clear_dir(path: String) -> Result<(), String> {
+    match std::fs::remove_dir_all(&path) {
+        Ok(_) => {},
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {},
+        Err(e) => return Err(e.to_string()),
+    }
+    std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 fn main() {
@@ -200,7 +232,7 @@ fn main() {
                 let _ = window.emit("menu-event", id);
             }
         })
-        .invoke_handler(tauri::generate_handler![read_file, write_file, read_dir, create_new_file, menu_action, quit_app, rebuild_menu])
+        .invoke_handler(tauri::generate_handler![read_file, write_file, read_dir, create_new_file, menu_action, quit_app, rebuild_menu, drafts_dir, remove_file, clear_dir])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
