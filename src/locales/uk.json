@@ -1,0 +1,67 @@
+{
+  "app.title": "Editrion — Текстовий редактор (Бета)",
+  "sidebar.projects": "Проєкти",
+  "sidebar.addFolder": "＋ Додати теку",
+  "welcome.title": "Ласкаво просимо до Editrion (Бета)",
+  "welcome.subtitle": "Відкрийте файл або додайте теку, щоб почати.",
+  "welcome.openFile": "Відкрити файл",
+  "welcome.addFolder": "Додати теку",
+
+  "search.placeholder": "Пошук...",
+  "search.findAll": "Знайти все",
+  "search.invalidRegex": "Некоректний вираз",
+  "search.matches": "Збігів: {count}",
+  "search.showingNote": " (показано {count})",
+
+  "context.closeOthers": "Закрити інші",
+  "context.closeRight": "Закрити вкладки праворуч",
+
+  "dialog.saveFile": "Зберегти файл",
+  "dialog.saveAs": "Зберегти як",
+  "dialog.openFile": "Відкрити файл",
+  "dialog.openFolder": "Відкрити теку",
+
+  "prompt.enterFilePathToSave": "Введіть шлях для збереження:",
+  "prompt.enterFilePathToOpen": "Введіть шлях до файлу для відкриття:",
+  "prompt.enterFolderPathToOpen": "Введіть шлях до теки для відкриття:",
+
+  "alert.failedToLoadCustomTheme": "Не вдалося завантажити тему. Перевірте формат JSON.",
+  "alert.failedToOpenFile": "Не вдалося відкрити файл: {error}",
+
+  "common.untitled": "Без назви",
+  "ui.language": "Мова",
+
+  "menu.file": "Файл",
+  "menu.edit": "Редагування",
+  "menu.view": "Вигляд",
+  "menu.window": "Вікно",
+  "menu.settings": "Налаштування",
+  "menu.language": "Мова",
+  "menu.theme": "Тема",
+
+  "menu.item.newFile": "Новий файл",
+  "menu.item.openFile": "Відкрити файл...",
+  "menu.item.openFolder": "Відкрити теку...",
+  "menu.item.save": "Зберегти",
+  "menu.item.saveAs": "Зберегти як…",
+  "menu.item.closeTab": "Закрити вкладку",
+  "menu.item.quit": "Вийти з Editrion (Бета)",
+
+  "menu.item.find": "Пошук",
+  "menu.item.replace": "Замінити",
+  "menu.item.selectAllOccurrences": "Вибрати всі входження",
+  "menu.item.undo": "Скасувати",
+  "menu.item.redo": "Повторити",
+  "menu.item.cut": "Вирізати",
+  "menu.item.copy": "Копіювати",
+  "menu.item.paste": "Вставити",
+
+  "menu.item.theme.dark": "Темна",
+  "menu.item.theme.light": "Світла",
+  "menu.item.theme.loadCustom": "Завантажити свою…",
+
+  "menu.item.window.show": "Показати вікно",
+
+  "menu.item.lang.en": "English",
+  "menu.item.lang.uk": "Українська"
+}

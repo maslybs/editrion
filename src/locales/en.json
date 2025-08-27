@@ -1,0 +1,67 @@
+{
+  "app.title": "Editrion - Text Editor (Beta)",
+  "sidebar.projects": "Projects",
+  "sidebar.addFolder": "＋ Add Folder",
+  "welcome.title": "Welcome to Editrion (Beta)",
+  "welcome.subtitle": "Open a file or add a folder to get started.",
+  "welcome.openFile": "Open File",
+  "welcome.addFolder": "Add Folder",
+
+  "search.placeholder": "Find...",
+  "search.findAll": "Find All",
+  "search.invalidRegex": "Invalid regex",
+  "search.matches": "{count} matches",
+  "search.showingNote": " (showing {count})",
+
+  "context.closeOthers": "Close Others",
+  "context.closeRight": "Close Tabs to the Right",
+
+  "dialog.saveFile": "Save File",
+  "dialog.saveAs": "Save As",
+  "dialog.openFile": "Open File",
+  "dialog.openFolder": "Open Folder",
+
+  "prompt.enterFilePathToSave": "Enter file path to save:",
+  "prompt.enterFilePathToOpen": "Enter file path to open:",
+  "prompt.enterFolderPathToOpen": "Enter folder path to open:",
+
+  "alert.failedToLoadCustomTheme": "Failed to load custom theme. Please check JSON format.",
+  "alert.failedToOpenFile": "Failed to open file: {error}",
+
+  "common.untitled": "Untitled",
+  "ui.language": "Language",
+
+  "menu.file": "File",
+  "menu.edit": "Edit",
+  "menu.view": "View",
+  "menu.window": "Window",
+  "menu.settings": "Settings",
+  "menu.language": "Language",
+  "menu.theme": "Theme",
+
+  "menu.item.newFile": "New File",
+  "menu.item.openFile": "Open File...",
+  "menu.item.openFolder": "Open Folder...",
+  "menu.item.save": "Save",
+  "menu.item.saveAs": "Save As…",
+  "menu.item.closeTab": "Close Tab",
+  "menu.item.quit": "Quit Editrion (Beta)",
+
+  "menu.item.find": "Find",
+  "menu.item.replace": "Replace",
+  "menu.item.selectAllOccurrences": "Select All Occurrences",
+  "menu.item.undo": "Undo",
+  "menu.item.redo": "Redo",
+  "menu.item.cut": "Cut",
+  "menu.item.copy": "Copy",
+  "menu.item.paste": "Paste",
+
+  "menu.item.theme.dark": "Dark",
+  "menu.item.theme.light": "Light",
+  "menu.item.theme.loadCustom": "Load Custom…",
+
+  "menu.item.window.show": "Show Window",
+
+  "menu.item.lang.en": "English",
+  "menu.item.lang.uk": "Українська"
+}

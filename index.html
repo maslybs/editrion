@@ -5,15 +5,17 @@
     <!-- Optional favicon for browser dev; not used by packaged app -->
     <link rel="icon" type="image/svg+xml" href="./vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Editrion - Text Editor (Beta)</title>
+    <title data-i18n="app.title">Editrion - Text Editor (Beta)</title>
   </head>
   <body>
     <div id="app">
       <div class="main-container">
         <div id="sidebar" class="sidebar">
           <div class="sidebar-header">
-            <span class="sidebar-title">Projects</span>
-            <button id="add-folder-btn" class="sidebar-action">＋ Add Folder</button>
+            <span class="sidebar-title" data-i18n="sidebar.projects">Projects</span>
+            <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+              <button id="add-folder-btn" class="sidebar-action" data-i18n="sidebar.addFolder">＋ Add Folder</button>
+            </div>
           </div>
           <div id="folder-tree"></div>
         </div>
@@ -21,11 +23,11 @@
           <div id="tabs" class="tabs"></div>
           <div id="welcome" class="welcome hidden">
             <div class="welcome-card">
-              <h1>Welcome to Editrion (Beta)</h1>
-              <p>Open a file or add a folder to get started.</p>
+              <h1 data-i18n="welcome.title">Welcome to Editrion (Beta)</h1>
+              <p data-i18n="welcome.subtitle">Open a file or add a folder to get started.</p>
               <div class="welcome-actions">
-                <button id="welcome-open-file" class="primary">Open File</button>
-                <button id="welcome-open-folder">Add Folder</button>
+                <button id="welcome-open-file" class="primary" data-i18n="welcome.openFile">Open File</button>
+                <button id="welcome-open-folder" data-i18n="welcome.addFolder">Add Folder</button>
               </div>
             </div>
           </div>
@@ -35,11 +37,11 @@
       <div id="search-panel" class="search-panel hidden">
         <div class="search-controls">
           <div class="search-input-group">
-            <input type="text" id="search-input" placeholder="Find..." />
+            <input type="text" id="search-input" placeholder="Find..." data-i18n-attr="placeholder:search.placeholder" />
             <span id="search-results-count" class="search-count"></span>
           </div>
           <div class="search-buttons">
-            <button id="find-all-btn" class="search-btn primary">Find All</button>
+            <button id="find-all-btn" class="search-btn primary" data-i18n="search.findAll">Find All</button>
             <button id="find-prev-btn" class="search-btn">↑</button>
             <button id="find-next-btn" class="search-btn">↓</button>
             <button id="case-sensitive-btn" class="search-btn toggle">Aa</button>
@@ -50,8 +52,8 @@
         </div>
       </div>
       <div id="tab-context-menu" class="context-menu hidden">
-        <div id="ctx-close-others" class="context-menu-item">Close Others</div>
-        <div id="ctx-close-right" class="context-menu-item">Close Tabs to the Right</div>
+        <div id="ctx-close-others" class="context-menu-item" data-i18n="context.closeOthers">Close Others</div>
+        <div id="ctx-close-right" class="context-menu-item" data-i18n="context.closeRight">Close Tabs to the Right</div>
       </div>
       </div>
     </div>

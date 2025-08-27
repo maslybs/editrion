@@ -8,6 +8,9 @@ import 'monaco-editor/esm/vs/language/css/monaco.contribution';
 import 'monaco-editor/esm/vs/language/html/monaco.contribution';
 import 'monaco-editor/esm/vs/language/typescript/monaco.contribution';
 import './style.css';
+import { initI18n, setLocale, t, registerDictionaries, applyTranslations } from './i18n';
+import en from './locales/en.json';
+import uk from './locales/uk.json';
 
 interface FileItem {
   name: string;
@@ -76,7 +79,16 @@ class Editrion {
     this.tabContextMenu = document.getElementById('tab-context-menu')!;
     this.ctxCloseOthersItem = document.getElementById('ctx-close-others')!;
     this.ctxCloseRightItem = document.getElementById('ctx-close-right')!;
-    
+
+    // i18n dictionaries and initialization
+    registerDictionaries('en', en as any);
+    registerDictionaries('uk', uk as any);
+    initI18n();
+    applyTranslations();
+
+    // Build native menu with current locale labels
+    this.updateNativeMenuLabels();
+
     this.init();
   }
   
@@ -133,6 +145,8 @@ class Editrion {
     this.welcomeOpenFileBtn?.addEventListener('click', () => this.openFile());
     this.welcomeOpenFolderBtn?.addEventListener('click', () => this.openFolder());
 
+    // Language switcher now moved to app menu (Settings -> Language)
+
     // Disable default browser context menu outside Monaco editor
     document.addEventListener('contextmenu', (e) => {
       const target = e.target as HTMLElement;
@@ -158,6 +172,52 @@ class Editrion {
 
     // Restore saved projects
     this.restoreProjects();
+  }
+
+  private async updateNativeMenuLabels() {
+    // Pass translated labels to backend to rebuild native menu
+    const labels = {
+      'menu.file': t('menu.file'),
+      'menu.edit': t('menu.edit'),
+      'menu.view': t('menu.view'),
+      'menu.window': t('menu.window'),
+      'menu.settings': t('menu.settings'),
+      'menu.language': t('menu.language'),
+      'menu.theme': t('menu.theme'),
+
+      'menu.item.newFile': t('menu.item.newFile'),
+      'menu.item.openFile': t('menu.item.openFile'),
+      'menu.item.openFolder': t('menu.item.openFolder'),
+      'menu.item.save': t('menu.item.save'),
+      'menu.item.saveAs': t('menu.item.saveAs'),
+      'menu.item.closeTab': t('menu.item.closeTab'),
+      'menu.item.quit': t('menu.item.quit'),
+
+      // Edit menu items
+      'menu.item.undo': t('menu.item.undo'),
+      'menu.item.redo': t('menu.item.redo'),
+      'menu.item.cut': t('menu.item.cut'),
+      'menu.item.copy': t('menu.item.copy'),
+      'menu.item.paste': t('menu.item.paste'),
+
+      'menu.item.find': t('menu.item.find'),
+      'menu.item.replace': t('menu.item.replace'),
+      'menu.item.selectAllOccurrences': t('menu.item.selectAllOccurrences'),
+
+      'menu.item.theme.dark': t('menu.item.theme.dark'),
+      'menu.item.theme.light': t('menu.item.theme.light'),
+      'menu.item.theme.loadCustom': t('menu.item.theme.loadCustom'),
+
+      'menu.item.window.show': t('menu.item.window.show'),
+
+      'menu.item.lang.en': t('menu.item.lang.en'),
+      'menu.item.lang.uk': t('menu.item.lang.uk'),
+    } as Record<string, string>;
+    try {
+      await invoke('rebuild_menu', { labels });
+    } catch (e) {
+      console.warn('Failed to rebuild native menu:', e);
+    }
   }
 
   private setBuiltInTheme(theme: 'dark' | 'light') {
@@ -215,7 +275,7 @@ class Editrion {
       this.applyCustomTheme(String(name), def);
     } catch (e) {
       console.error('Failed to load custom theme:', e);
-      alert('Failed to load custom theme. Please check JSON format.');
+      alert(t('alert.failedToLoadCustomTheme'));
     }
   }
 
@@ -373,7 +433,7 @@ class Editrion {
       this.switchToTab(tabId);
     } catch (error) {
       console.error('Failed to open file:', error);
-      alert('Failed to open file: ' + (error as any));
+      alert(t('alert.failedToOpenFile', { error: String(error) }));
     }
   }
   
@@ -649,10 +709,11 @@ class Editrion {
             json: 'json', xml: 'xml', yaml: 'yml', sql: 'sql', shell: 'sh'
           };
           const defaultExt = langToExt[lang] || 'txt';
-          const defaultBase = tab.name && tab.name !== 'Untitled' ? tab.name : 'Untitled';
+          const untitled = t('common.untitled');
+          const defaultBase = tab.name && tab.name !== untitled ? tab.name : untitled;
           const defaultPath = defaultBase.includes('.') ? defaultBase : `${defaultBase}.${defaultExt}`;
           const savedPath = await save({
-            title: 'Save File',
+            title: t('dialog.saveFile'),
             defaultPath,
             filters: [
               { name: 'Text', extensions: ['txt', 'md', 'log'] },
@@ -676,7 +737,7 @@ class Editrion {
         } catch (error) {
           console.error('Failed to open save dialog:', error);
           // Fallback - ask user to type path
-          const path = prompt('Enter file path to save:');
+          const path = prompt(t('prompt.enterFilePathToSave'));
           if (!path) return;
           
           filePath = path;
@@ -706,10 +767,11 @@ class Editrion {
         json: 'json', xml: 'xml', yaml: 'yml', sql: 'sql', shell: 'sh'
       };
       const defaultExt = langToExt[lang] || 'txt';
-      const defaultBase = tab.name && tab.name !== 'Untitled' ? tab.name : 'Untitled';
+      const untitled = t('common.untitled');
+      const defaultBase = tab.name && tab.name !== untitled ? tab.name : untitled;
       const defaultPath = defaultBase.includes('.') ? defaultBase : `${defaultBase}.${defaultExt}`;
       const savedPath = await save({
-        title: 'Save As',
+        title: t('dialog.saveAs'),
         defaultPath,
         filters: [
           { name: 'Text', extensions: ['txt', 'md', 'log'] },
@@ -748,7 +810,7 @@ class Editrion {
       
       const tab: Tab = {
         id: tabId,
-        name: 'Untitled',
+        name: t('common.untitled'),
         path: tempName,
         isDirty: false,
         originalContent: ''
@@ -766,21 +828,21 @@ class Editrion {
   public async openFile() {
     try {
       const filePath = await open({
-        title: 'Open File',
+        title: t('dialog.openFile'),
         multiple: false,
         directory: false
       });
       
       if (!filePath) return; // User cancelled
       
-      const fileName = this.basename(filePath as string) || 'Untitled';
+      const fileName = this.basename(filePath as string) || t('common.untitled');
       await this.openFileByPath(filePath as string, fileName);
     } catch (error) {
       console.error('Failed to open file dialog:', error);
       // Fallback - ask user to type path
-      const path = prompt('Enter file path to open:');
+      const path = prompt(t('prompt.enterFilePathToOpen'));
       if (path) {
-        const name = this.basename(path) || 'Untitled';
+        const name = this.basename(path) || t('common.untitled');
         await this.openFileByPath(path, name);
       }
     }
@@ -789,7 +851,7 @@ class Editrion {
   public async openFolder() {
     try {
       const folderPath = await open({
-        title: 'Open Folder',
+        title: t('dialog.openFolder'),
         multiple: false,
         directory: true
       });
@@ -799,7 +861,7 @@ class Editrion {
     } catch (error) {
       console.error('Failed to open folder dialog:', error);
       // Fallback - ask user to type path
-      const path = prompt('Enter folder path to open:');
+      const path = prompt(t('prompt.enterFolderPathToOpen'));
       if (path) {
         this.addProjectRoot(path);
       }
@@ -1057,6 +1119,16 @@ class Editrion {
         case 'theme_load_custom':
           this.loadCustomThemeFromFile();
           break;
+        case 'language_en':
+          setLocale('en');
+          applyTranslations();
+          this.updateNativeMenuLabels();
+          break;
+        case 'language_uk':
+          setLocale('uk');
+          applyTranslations();
+          this.updateNativeMenuLabels();
+          break;
       }
     });
     // Handle native window close request (Windows/Linux)
@@ -1154,8 +1226,8 @@ class Editrion {
       
       const total = matches.length;
       const limited = matches.slice(0, this.maxSearchHighlights);
-      const limitedNote = total > this.maxSearchHighlights ? ` (showing ${this.maxSearchHighlights})` : '';
-      this.searchCount.textContent = `${total} matches${limitedNote}`;
+      const limitedNote = total > this.maxSearchHighlights ? t('search.showingNote', { count: this.maxSearchHighlights }) : '';
+      this.searchCount.textContent = `${t('search.matches', { count: total })}${limitedNote}`;
       
       // Highlight all matches
       const decorations = limited.map(match => ({
@@ -1169,7 +1241,7 @@ class Editrion {
       activeTab.searchDecorationIds = newIds;
     } catch (error) {
       // Handle regex errors
-      this.searchCount.textContent = 'Invalid regex';
+      this.searchCount.textContent = t('search.invalidRegex');
       // On invalid regex, clear previous highlights to avoid stale state
       if (activeTab.searchDecorationIds && activeTab.searchDecorationIds.length > 0) {
         const cleared = activeTab.editor.deltaDecorations(activeTab.searchDecorationIds, []);

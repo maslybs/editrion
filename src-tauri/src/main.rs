@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use tauri::{Emitter, Manager};
+use std::collections::HashMap;
 
 #[tauri::command]
 fn read_file(path: String) -> Result<String, String> {
@@ -88,7 +89,7 @@ fn main() {
         .setup(|app| {
             use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
             
-            // Create menu using Tauri v2 menu system
+            // Initial static English menu; frontend will rebuild it with translations on load
             let new_file = MenuItem::with_id(app, "new_file", "New File", true, Some("CmdOrCtrl+N"))?;
             let open_file = MenuItem::with_id(app, "open_file", "Open File...", true, Some("CmdOrCtrl+O"))?;
             let open_folder = MenuItem::with_id(app, "open_folder", "Open Folder...", true, None::<&str>)?;
@@ -114,13 +115,19 @@ fn main() {
             let replace = MenuItem::with_id(app, "replace", "Replace", true, Some("CmdOrCtrl+H"))?;
             let select_all = MenuItem::with_id(app, "select_all_occurrences", "Select All Occurrences", true, Some("CmdOrCtrl+Shift+L"))?;
             
+            // Initial static menu (English); use predefined items for proper shortcut routing.
+            let edit_undo = PredefinedMenuItem::undo(app, Some("Undo"))?;
+            let edit_redo = PredefinedMenuItem::redo(app, Some("Redo"))?;
+            let edit_cut = PredefinedMenuItem::cut(app, Some("Cut"))?;
+            let edit_copy = PredefinedMenuItem::copy(app, Some("Copy"))?;
+            let edit_paste = PredefinedMenuItem::paste(app, Some("Paste"))?;
             let edit_menu = Submenu::with_items(app, "Edit", true, &[
-                &PredefinedMenuItem::undo(app, None)?,
-                &PredefinedMenuItem::redo(app, None)?,
+                &edit_undo,
+                &edit_redo,
                 &PredefinedMenuItem::separator(app)?,
-                &PredefinedMenuItem::cut(app, None)?,
-                &PredefinedMenuItem::copy(app, None)?,
-                &PredefinedMenuItem::paste(app, None)?,
+                &edit_cut,
+                &edit_copy,
+                &edit_paste,
                 &PredefinedMenuItem::separator(app)?,
                 &find,
                 &replace,
@@ -129,9 +136,9 @@ fn main() {
             ])?;
             
             // View -> Theme
-            let theme_dark = MenuItem::with_id(app, "theme_dark", "Theme: Dark", true, None::<&str>)?;
-            let theme_light = MenuItem::with_id(app, "theme_light", "Theme: Light", true, None::<&str>)?;
-            let theme_load_custom = MenuItem::with_id(app, "theme_load_custom", "Theme: Load Custom…", true, None::<&str>)?;
+            let theme_dark = MenuItem::with_id(app, "theme_dark", "Dark", true, None::<&str>)?;
+            let theme_light = MenuItem::with_id(app, "theme_light", "Light", true, None::<&str>)?;
+            let theme_load_custom = MenuItem::with_id(app, "theme_load_custom", "Load Custom…", true, None::<&str>)?;
             let theme_submenu = Submenu::with_items(app, "Theme", true, &[
                 &theme_dark,
                 &theme_light,
@@ -143,13 +150,24 @@ fn main() {
                 &theme_submenu,
             ])?;
 
+            // Settings -> Language
+            let lang_en = MenuItem::with_id(app, "language_en", "Language: English", true, None::<&str>)?;
+            let lang_uk = MenuItem::with_id(app, "language_uk", "Language: Українська", true, None::<&str>)?;
+            let language_submenu = Submenu::with_items(app, "Language", true, &[
+                &lang_en,
+                &lang_uk,
+            ])?;
+            let settings_menu = Submenu::with_items(app, "Settings", true, &[
+                &language_submenu,
+            ])?;
+
             // Window menu
             let show_window = MenuItem::with_id(app, "show_window", "Show Window", true, None::<&str>)?;
             let window_menu = Submenu::with_items(app, "Window", true, &[
                 &show_window,
             ])?;
 
-            let menu = Menu::with_items(app, &[&file_menu, &edit_menu, &view_menu, &window_menu])?;
+            let menu = Menu::with_items(app, &[&file_menu, &edit_menu, &view_menu, &settings_menu, &window_menu])?;
             app.set_menu(menu)?;
 
             Ok(())
@@ -174,7 +192,7 @@ fn main() {
                 let _ = window.emit("menu-event", id);
             }
         })
-        .invoke_handler(tauri::generate_handler![read_file, write_file, read_dir, create_new_file, menu_action, quit_app])
+        .invoke_handler(tauri::generate_handler![read_file, write_file, read_dir, create_new_file, menu_action, quit_app, rebuild_menu])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
@@ -195,4 +213,90 @@ fn main() {
             _ => {}
         }
     });
+}
+
+#[tauri::command]
+fn rebuild_menu(app: tauri::AppHandle, labels: HashMap<String, String>) -> Result<(), String> {
+    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+
+    // Helper to get a label or fallback to key
+    let g = |k: &str| labels.get(k).cloned().unwrap_or_else(|| k.to_string());
+
+    let new_file = MenuItem::with_id(&app, "new_file", &g("menu.item.newFile"), true, Some("CmdOrCtrl+N")).map_err(|e| e.to_string())?;
+    let open_file = MenuItem::with_id(&app, "open_file", &g("menu.item.openFile"), true, Some("CmdOrCtrl+O")).map_err(|e| e.to_string())?;
+    let open_folder = MenuItem::with_id(&app, "open_folder", &g("menu.item.openFolder"), true, None::<&str>).map_err(|e| e.to_string())?;
+    let save = MenuItem::with_id(&app, "save", &g("menu.item.save"), true, Some("CmdOrCtrl+S")).map_err(|e| e.to_string())?;
+    let save_as = MenuItem::with_id(&app, "save_as", &g("menu.item.saveAs"), true, Some("CmdOrCtrl+Shift+S")).map_err(|e| e.to_string())?;
+    let close_tab = MenuItem::with_id(&app, "close_tab", &g("menu.item.closeTab"), true, Some("CmdOrCtrl+W")).map_err(|e| e.to_string())?;
+    let quit_custom = MenuItem::with_id(&app, "quit_app", &g("menu.item.quit"), true, Some("CmdOrCtrl+Q")).map_err(|e| e.to_string())?;
+    let file_menu = Submenu::with_items(&app, &g("menu.file"), true, &[
+        &new_file,
+        &open_file,
+        &open_folder,
+        &PredefinedMenuItem::separator(&app).map_err(|e| e.to_string())?,
+        &save,
+        &save_as,
+        &PredefinedMenuItem::separator(&app).map_err(|e| e.to_string())?,
+        &close_tab,
+        &PredefinedMenuItem::separator(&app).map_err(|e| e.to_string())?,
+        &quit_custom,
+    ]).map_err(|e| e.to_string())?;
+
+    let find = MenuItem::with_id(&app, "find", &g("menu.item.find"), true, Some("CmdOrCtrl+F")).map_err(|e| e.to_string())?;
+    let replace = MenuItem::with_id(&app, "replace", &g("menu.item.replace"), true, Some("CmdOrCtrl+H")).map_err(|e| e.to_string())?;
+    let select_all = MenuItem::with_id(&app, "select_all_occurrences", &g("menu.item.selectAllOccurrences"), true, Some("CmdOrCtrl+Shift+L")).map_err(|e| e.to_string())?;
+    // Use predefined items so OS/webview routes shortcuts (Cmd/Ctrl+Z/X/C/V)
+    let edit_undo = PredefinedMenuItem::undo(&app, Some(&g("menu.item.undo"))).map_err(|e| e.to_string())?;
+    let edit_redo = PredefinedMenuItem::redo(&app, Some(&g("menu.item.redo"))).map_err(|e| e.to_string())?;
+    let edit_cut = PredefinedMenuItem::cut(&app, Some(&g("menu.item.cut"))).map_err(|e| e.to_string())?;
+    let edit_copy = PredefinedMenuItem::copy(&app, Some(&g("menu.item.copy"))).map_err(|e| e.to_string())?;
+    let edit_paste = PredefinedMenuItem::paste(&app, Some(&g("menu.item.paste"))).map_err(|e| e.to_string())?;
+    let edit_menu = Submenu::with_items(&app, &g("menu.edit"), true, &[
+        &edit_undo,
+        &edit_redo,
+        &PredefinedMenuItem::separator(&app).map_err(|e| e.to_string())?,
+        &edit_cut,
+        &edit_copy,
+        &edit_paste,
+        &PredefinedMenuItem::separator(&app).map_err(|e| e.to_string())?,
+        &find,
+        &replace,
+        &PredefinedMenuItem::separator(&app).map_err(|e| e.to_string())?,
+        &select_all,
+    ]).map_err(|e| e.to_string())?;
+
+    let theme_dark = MenuItem::with_id(&app, "theme_dark", &g("menu.item.theme.dark"), true, None::<&str>).map_err(|e| e.to_string())?;
+    let theme_light = MenuItem::with_id(&app, "theme_light", &g("menu.item.theme.light"), true, None::<&str>).map_err(|e| e.to_string())?;
+    let theme_load_custom = MenuItem::with_id(&app, "theme_load_custom", &g("menu.item.theme.loadCustom"), true, None::<&str>).map_err(|e| e.to_string())?;
+    let theme_submenu = Submenu::with_items(&app, &g("menu.theme"), true, &[
+        &theme_dark,
+        &theme_light,
+        &PredefinedMenuItem::separator(&app).map_err(|e| e.to_string())?,
+        &theme_load_custom,
+    ]).map_err(|e| e.to_string())?;
+
+    let view_menu = Submenu::with_items(&app, &g("menu.view"), true, &[
+        &theme_submenu,
+    ]).map_err(|e| e.to_string())?;
+
+    // Settings -> Language
+    let lang_en = MenuItem::with_id(&app, "language_en", &g("menu.item.lang.en"), true, None::<&str>).map_err(|e| e.to_string())?;
+    let lang_uk = MenuItem::with_id(&app, "language_uk", &g("menu.item.lang.uk"), true, None::<&str>).map_err(|e| e.to_string())?;
+    let language_submenu = Submenu::with_items(&app, &g("menu.language"), true, &[
+        &lang_en,
+        &lang_uk,
+    ]).map_err(|e| e.to_string())?;
+    let settings_menu = Submenu::with_items(&app, &g("menu.settings"), true, &[
+        &language_submenu,
+    ]).map_err(|e| e.to_string())?;
+
+    // Window menu
+    let show_window = MenuItem::with_id(&app, "show_window", &g("menu.item.window.show"), true, None::<&str>).map_err(|e| e.to_string())?;
+    let window_menu = Submenu::with_items(&app, &g("menu.window"), true, &[
+        &show_window,
+    ]).map_err(|e| e.to_string())?;
+
+    let menu = Menu::with_items(&app, &[&file_menu, &edit_menu, &view_menu, &settings_menu, &window_menu]).map_err(|e| e.to_string())?;
+    app.set_menu(menu).map_err(|e| e.to_string())?;
+    Ok(())
 }
