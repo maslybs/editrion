@@ -240,6 +240,7 @@ fn main() {
     app.run(|app_handle, event| {
         match event {
             // macOS Dock icon clicked or app re-opened when no windows are visible
+            #[cfg(target_os = "macos")]
             tauri::RunEvent::Reopen { .. } => {
                 if let Some(window) = app_handle.get_webview_window("main") {
                     let _ = window.show();
