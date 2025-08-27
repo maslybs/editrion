@@ -237,12 +237,12 @@ fn main() {
         .expect("error while building tauri application");
 
     // Handle app-level events (e.g., Dock icon click on macOS)
-    app.run(|app_handle, event| {
+    app.run(|_app_handle, event| {
         match event {
             // macOS Dock icon clicked or app re-opened when no windows are visible
             #[cfg(target_os = "macos")]
             tauri::RunEvent::Reopen { .. } => {
-                if let Some(window) = app_handle.get_webview_window("main") {
+                if let Some(window) = _app_handle.get_webview_window("main") {
                     let _ = window.show();
                     let _ = window.set_focus();
                 }
