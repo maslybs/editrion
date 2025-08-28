@@ -80,5 +80,6 @@
   "confirm.unsavedMulti": "Änderungen in {count} Tabs vor dem Schließen speichern?",
   "button.save": "Speichern",
   "button.dontSave": "Nicht speichern",
-  "button.cancel": "Abbrechen"
+  "button.cancel": "Abbrechen",
+  "codex.titleTransform": "Was möchten Sie tun?"
 }

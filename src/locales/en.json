@@ -81,4 +81,14 @@
   "button.save": "Save",
   "button.dontSave": "Don't Save",
   "button.cancel": "Cancel"
+  ,
+ 
+  "status.runningCodex": "Running AI…"
+  ,
+ 
+  "button.run": "Run"
+  ,
+ 
+  "codex.titleTransform": "What do you want to do?",
+  "codex.instruction.placeholder": "e.g., Translate to"
 }

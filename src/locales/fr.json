@@ -79,5 +79,6 @@
   "confirm.unsavedMulti": "Enregistrer les modifications dans {count} onglets avant de fermer ?",
   "button.save": "Enregistrer",
   "button.dontSave": "Ne pas enregistrer",
-  "button.cancel": "Annuler"
+  "button.cancel": "Annuler",
+  "codex.titleTransform": "Que voulez-vous faire ?"
 }

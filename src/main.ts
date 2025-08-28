@@ -558,7 +558,6 @@ class Editrion {
       }
     });
     
-    // Enable multi-cursor with Cmd+Click (Mac) / Ctrl+Click (Windows/Linux)
     tab.originalContent = tab.originalContent ?? content;
     editor.onDidChangeModelContent(() => {
       const current = editor.getValue();
@@ -578,23 +577,164 @@ class Editrion {
       }
     });
     
-    // Save on Cmd+S / Ctrl+S
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-      this.saveFile(tab);
+    // Add Codex action in Monaco context menu
+    editor.addAction({
+      id: 'codex.runOnSelection',
+      label: 'AI',
+      contextMenuGroupId: 'navigation',
+      contextMenuOrder: 1.5,
+      run: async () => {
+        const sel = editor.getSelection();
+        const model = editor.getModel();
+        const selected = sel && model ? model.getValueInRange(sel) : '';
+        const instruction = await this.showCodexInstructionModal();
+        if (!instruction) return;
+        let cwd: string | undefined;
+        if (tab.path) {
+          const parts = tab.path.split(/[/\\]/); parts.pop(); cwd = parts.join('/');
+        } else if (this.projectRoots.length > 0) { cwd = this.projectRoots[0]; }
+        const prompt = `${instruction}\n\n--- INPUT START ---\n${selected}\n--- INPUT END ---\n\nReturn only the transformed text.`;
+        // Show lightweight inline loader in status bar
+        const status = this.showInlineStatus(t('status.runningCodex') || 'Running AI…');
+        invoke<string>('codex_exec', { prompt, cwd })
+          .then((output) => {
+            if (sel && model) {
+              editor.executeEdits('codex', [{ range: sel, text: output, forceMoveMarkers: true }]);
+              editor.focus();
+            }
+          })
+          .catch((e) => alert('Codex failed: ' + String(e)))
+          .finally(() => status.remove());
+      }
     });
     
-    // Custom search on Cmd+F / Ctrl+F
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, () => {
-      this.showSearch();
-    });
-
-    // Format document on Shift+Alt+F (standard Monaco/VS Code binding)
-    editor.addCommand(monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF, () => {
-      editor.getAction('editor.action.formatDocument')?.run();
-    });
+    // Save / format / find bindings remain as before
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => this.saveFile(tab));
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, () => this.showSearch());
+    editor.addCommand(monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF, () => { editor.getAction('editor.action.formatDocument')?.run(); });
     
     tab.editor = editor;
   }
+
+  private showCodexInstructionModal(): Promise<string | null> {
+    return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.style.position = 'fixed';
+      overlay.style.inset = '0';
+      overlay.style.background = 'rgba(0,0,0,0.45)';
+      overlay.style.display = 'flex';
+      overlay.style.alignItems = 'center';
+      overlay.style.justifyContent = 'center';
+      overlay.style.zIndex = '10000';
+
+      const box = document.createElement('div');
+      box.style.width = 'min(520px, 92vw)';
+      box.style.background = 'var(--panel-bg, #1e1e1e)';
+      box.style.color = 'var(--text, #fff)';
+      box.style.borderRadius = '10px';
+      box.style.boxShadow = '0 8px 32px rgba(0,0,0,0.5)';
+      box.style.display = 'flex';
+      box.style.flexDirection = 'column';
+      box.style.overflow = 'hidden';
+
+      const header = document.createElement('div');
+      header.textContent = t('codex.titleTransform') || 'Codex Transform';
+      header.style.padding = '12px 16px';
+      header.style.fontSize = '16px';
+      header.style.fontWeight = '600';
+      header.style.borderBottom = '1px solid rgba(255,255,255,0.06)';
+
+      const body = document.createElement('div');
+      body.style.padding = '14px 16px 4px';
+
+      const instr = document.createElement('input');
+      instr.type = 'text';
+      instr.placeholder = t('codex.instruction.placeholder') || 'e.g., Translate to Ukrainian';
+      instr.style.width = '100%';
+      instr.style.padding = '10px';
+      instr.style.borderRadius = '6px';
+      instr.style.border = '1px solid rgba(255,255,255,0.1)';
+      instr.style.background = 'var(--editor-bg, #252526)';
+      instr.style.color = '#e6db74';
+
+      body.appendChild(instr);
+
+      const actions = document.createElement('div');
+      actions.style.display = 'flex';
+      actions.style.alignItems = 'center';
+      actions.style.gap = '10px';
+      actions.style.justifyContent = 'flex-end';
+      actions.style.padding = '10px 16px 14px';
+
+      const status = document.createElement('span');
+      status.textContent = '';
+      status.style.opacity = '0.85';
+      status.style.fontSize = '12px';
+      status.style.marginRight = 'auto';
+
+      const btnCancel = document.createElement('button');
+      btnCancel.textContent = t('button.cancel');
+      btnCancel.style.padding = '8px 12px';
+      btnCancel.style.borderRadius = '6px';
+      btnCancel.style.border = '1px solid rgba(255,255,255,0.12)';
+      btnCancel.style.background = 'transparent';
+      btnCancel.style.color = 'inherit';
+
+      const btnRun = document.createElement('button');
+      btnRun.textContent = t('button.run') || 'Run';
+      btnRun.style.padding = '8px 12px';
+      btnRun.style.borderRadius = '6px';
+      btnRun.style.border = '1px solid rgba(0,0,0,0)';
+      btnRun.style.background = '#3a86ff';
+      btnRun.style.color = '#fff';
+
+      const cleanup = (value: string | null) => {
+        overlay.remove();
+        resolve(value);
+      };
+
+      btnCancel.addEventListener('click', () => cleanup(null));
+      btnRun.addEventListener('click', () => {
+        btnRun.disabled = true; btnCancel.disabled = true; instr.disabled = true;
+        status.textContent = t('status.runningCodex') || 'Running AI…';
+        cleanup(instr.value || 'Translate to Ukrainian');
+      });
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(null); });
+      instr.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') { e.preventDefault(); cleanup(null); }
+        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); btnRun.click(); }
+      });
+
+      actions.appendChild(status);
+      actions.appendChild(btnCancel);
+      actions.appendChild(btnRun);
+      box.appendChild(header);
+      box.appendChild(body);
+      box.appendChild(actions);
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+      setTimeout(() => instr.focus(), 0);
+    });
+  }
+
+  private showInlineStatus(text: string) {
+    const el = document.createElement('div');
+    el.textContent = text;
+    el.style.position = 'fixed';
+    el.style.bottom = '10px';
+    el.style.right = '10px';
+    el.style.padding = '6px 10px';
+    el.style.background = 'rgba(0,0,0,0.6)';
+    el.style.color = '#fff';
+    el.style.borderRadius = '6px';
+    el.style.fontSize = '12px';
+    el.style.zIndex = '9999';
+    document.body.appendChild(el);
+    return { remove: () => el.remove() };
+  }
+
+  // busy overlay removed; using inline status instead
+
 
   private createImageViewer(tab: Tab) {
     const viewerElement = document.createElement('div');
@@ -1371,6 +1511,7 @@ class Editrion {
           applyTranslations();
           this.updateNativeMenuLabels();
           break;
+        // codex_exec menu removed
       }
     });
     // Handle native window close request (Windows/Linux)

@@ -79,5 +79,6 @@
   "confirm.unsavedMulti": "¿Guardar los cambios en {count} pestañas antes de cerrar?",
   "button.save": "Guardar",
   "button.dontSave": "No guardar",
-  "button.cancel": "Cancelar"
+  "button.cancel": "Cancelar",
+  "codex.titleTransform": "¿Qué quieres hacer?"
 }

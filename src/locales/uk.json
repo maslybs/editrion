@@ -81,4 +81,14 @@
   "button.save": "Зберегти",
   "button.dontSave": "Не зберігати",
   "button.cancel": "Скасувати"
+  ,
+ 
+  "status.runningCodex": "Працює AI…"
+  ,
+ 
+  "button.run": "Запустити"
+  ,
+ 
+  "codex.titleTransform": "Що потрібно зробити?",
+  "codex.instruction.placeholder": "наприклад: Перекласти українською"
 }

@@ -3,13 +3,210 @@
 
 use tauri::{Emitter, Manager};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio, Child};
+use std::time::{Duration, Instant};
 
 #[tauri::command]
 fn read_file(path: String) -> Result<String, String> {
     // Read as bytes and decode lossily to allow non-UTF8 text files
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
     Ok(String::from_utf8_lossy(&bytes).to_string())
+}
+
+#[tauri::command]
+async fn codex_exec(prompt: String, cwd: Option<String>) -> Result<String, String> {
+    // Run potentially blocking process work off the main thread to keep UI responsive
+    tauri::async_runtime::spawn_blocking(move || run_codex_exec(prompt, cwd))
+        .await
+        .map_err(|e| format!("Failed to join codex worker: {}", e))?
+}
+
+fn run_codex_exec(prompt: String, cwd: Option<String>) -> Result<String, String> {
+    // Try running via resolved absolute path first
+    if let Some(codex_bin) = resolve_codex_path() {
+        match spawn_and_collect(|| {
+            let mut cmd = Command::new(&codex_bin);
+            cmd.arg("exec").arg("--skip-git-repo-check").arg(&prompt);
+            if let Some(ref dir) = cwd { if Path::new(dir).is_dir() { let _ = cmd.current_dir(dir); } }
+            cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+            cmd.spawn()
+        }) {
+            Ok(s) => return Ok(clean_codex_output(&s)),
+            Err(e) => {
+                // Fall through to zsh login shell attempt
+                eprintln!("direct codex spawn failed: {}", e);
+            }
+        }
+    }
+
+    // Fallback: run through login shell to load NVM/Brew PATH
+    let cmdline = format!("codex exec --skip-git-repo-check {}", shell_quote(&prompt));
+    match spawn_and_collect(|| {
+        let mut cmd = Command::new("/bin/zsh");
+        cmd.arg("-lc").arg(&cmdline);
+        if let Some(ref dir) = cwd { if Path::new(dir).is_dir() { let _ = cmd.current_dir(dir); } }
+        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+        cmd.spawn()
+    }) {
+        Ok(s) => Ok(clean_codex_output(&s)),
+        Err(e) => {
+            let path_env = std::env::var("PATH").unwrap_or_default();
+            Err(format!(
+                "Failed to start codex via zsh. Error: {}\nPATH: {}\nTry setting CODEX_BIN to absolute path of codex, or run 'codex' once in a terminal to sign in.",
+                e, path_env
+            ))
+        }
+    }
+}
+
+fn resolve_codex_path() -> Option<std::path::PathBuf> {
+    // 1) Respect CODEX_BIN if set and exists
+    if let Ok(p) = std::env::var("CODEX_BIN") {
+        let path = std::path::PathBuf::from(p);
+        if path.exists() { return Some(path); }
+    }
+    // 2) Try common locations (macOS Homebrew /usr/local)
+    let candidates = [
+        "/opt/homebrew/bin/codex",
+        "/usr/local/bin/codex",
+        "/usr/bin/codex",
+    ];
+    for c in candidates { let p = std::path::PathBuf::from(c); if p.exists() { return Some(p); } }
+    // 3) Try `which codex`
+    if let Ok(out) = Command::new("which").arg("codex").stdout(Stdio::piped()).output() {
+        let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if !s.is_empty() { let p = std::path::PathBuf::from(s); if p.exists() { return Some(p); } }
+    }
+    // 4) Try zsh login shell PATH
+    if let Ok(out) = Command::new("/bin/zsh").arg("-lc").arg("command -v codex").stdout(Stdio::piped()).output() {
+        let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if !s.is_empty() { let p = std::path::PathBuf::from(s); if p.exists() { return Some(p); } }
+    }
+    None
+}
+
+fn spawn_and_collect<F>(spawn: F) -> Result<String, String>
+where
+    F: FnOnce() -> std::io::Result<Child>,
+{
+    let mut child = spawn().map_err(|e| e.to_string())?;
+    let start = Instant::now();
+    let timeout = Duration::from_secs(90);
+    loop {
+        if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
+            let out = child.wait_with_output().map_err(|e| e.to_string())?;
+            if status.success() {
+                return Ok(String::from_utf8_lossy(&out.stdout).to_string());
+            } else {
+                let mut err = String::from_utf8_lossy(&out.stderr).to_string();
+                if err.trim().is_empty() { err = String::from_utf8_lossy(&out.stdout).to_string(); }
+                return Err(format!("codex exited with code {}: {}", status.code().unwrap_or(-1), err));
+            }
+        }
+        if start.elapsed() > timeout {
+            let _ = child.kill();
+            return Err("codex exec timed out. Ensure you're signed in: run 'codex' in a terminal once.".to_string());
+        }
+        std::thread::sleep(Duration::from_millis(150));
+    }
+}
+
+fn shell_quote(s: &str) -> String {
+    let mut out = String::from("'");
+    for ch in s.chars() {
+        if ch == '\'' { out.push_str("'\\''"); } else { out.push(ch); }
+    }
+    out.push('\'');
+    out
+}
+
+fn clean_codex_output(s: &str) -> String {
+    let no_ansi = strip_ansi(s);
+    let trimmed = extract_codex_result(&no_ansi);
+    if trimmed.trim().is_empty() {
+        no_ansi.trim().to_string()
+    } else {
+        trimmed.trim().to_string()
+    }
+}
+
+fn strip_ansi(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut it = s.chars().peekable();
+    while let Some(ch) = it.next() {
+        if ch == '\u{1b}' {
+            // Handle CSI sequences: ESC [ ... <alpha>
+            if let Some('[') = it.peek().copied() {
+                let _ = it.next(); // consume '['
+                while let Some(c) = it.next() {
+                    if c.is_ascii_alphabetic() { break; }
+                }
+                continue;
+            }
+            // Handle OSC sequences: ESC ] ... BEL (\u{07}) or ST (ESC \\)
+            if let Some(']') = it.peek().copied() {
+                let _ = it.next(); // consume ']'
+                // consume until BEL or ST
+                let mut prev_esc = false;
+                while let Some(c) = it.next() {
+                    if c == '\u{07}' { break; }
+                    if prev_esc && c == '\\' { break; }
+                    prev_esc = c == '\u{1b}';
+                }
+                continue;
+            }
+            // Fallback: skip until next ASCII letter
+            while let Some(c) = it.next() {
+                if c.is_ascii_alphabetic() { break; }
+            }
+        } else {
+            out.push(ch);
+        }
+    }
+    out
+}
+
+fn extract_codex_result(s: &str) -> String {
+    let mut capture = false;
+    let mut out = String::new();
+    for line in s.lines() {
+        if !capture {
+            if line.contains("] codex") {
+                capture = true;
+                continue; // skip marker line
+            }
+            continue;
+        } else {
+            // Stop on timestamp header or tokens summary
+            let ls = line.trim_start();
+            if is_timestamp_line(line) || ls.starts_with("tokens used:") {
+                break;
+            }
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    if out.trim().is_empty() {
+        // Fallback: remove timestamped lines and banner
+        let mut filtered = String::new();
+        for l in s.lines() {
+            if is_timestamp_line(l) { continue; }
+            filtered.push_str(l);
+            filtered.push('\n');
+        }
+        return filtered;
+    }
+    out
+}
+
+fn is_timestamp_line(line: &str) -> bool {
+    if !line.starts_with('[') { return false; }
+    if let Some(end) = line.find(']') {
+        let inside = &line[1..end];
+        return inside.chars().take(4).all(|c| c.is_ascii_digit());
+    }
+    false
 }
 
 #[tauri::command]
@@ -177,7 +374,6 @@ fn main() {
                 &PredefinedMenuItem::separator(app)?,
                 &theme_load_custom,
             ])?;
-
             let view_menu = Submenu::with_items(app, "View", true, &[
                 &theme_submenu,
             ])?;
@@ -232,7 +428,7 @@ fn main() {
                 let _ = window.emit("menu-event", id);
             }
         })
-        .invoke_handler(tauri::generate_handler![read_file, write_file, read_dir, create_new_file, menu_action, quit_app, rebuild_menu, drafts_dir, remove_file, clear_dir])
+        .invoke_handler(tauri::generate_handler![read_file, write_file, read_dir, create_new_file, menu_action, quit_app, rebuild_menu, drafts_dir, remove_file, clear_dir, codex_exec])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
@@ -319,6 +515,7 @@ fn rebuild_menu(app: tauri::AppHandle, labels: HashMap<String, String>) -> Resul
     let view_menu = Submenu::with_items(&app, &g("menu.view"), true, &[
         &theme_submenu,
     ]).map_err(|e| e.to_string())?;
+
 
     // Settings -> Language
     let lang_en = MenuItem::with_id(&app, "language_en", &g("menu.item.lang.en"), true, None::<&str>).map_err(|e| e.to_string())?;
