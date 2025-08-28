@@ -60,8 +60,22 @@ fn run_codex_exec_stream(window: tauri::Window, prompt: String, cwd: Option<Stri
             use std::io::Read;
             let mut tmp = [0u8; 2048];
             let mut acc = String::new();
-            let mut capture = false;
             let mut ended = false;
+            let mut started_content = false;
+            fn is_meta_line(line: &str) -> bool {
+                let ls = line.trim();
+                if ls.is_empty() { return false; }
+                if is_timestamp_line(ls) { return true; }
+                if ls.starts_with("--------") { return true; }
+                if ls.contains("OpenAI Codex") { return true; }
+                let prefixes = [
+                    "workdir:", "model:", "provider:", "approval:", "sandbox:",
+                    "reasoning", "User instructions:", "--- INPUT START", "--- INPUT END",
+                    "Return only the transformed text.",
+                ];
+                for p in prefixes { if ls.starts_with(p) { return true; } }
+                false
+            }
             let mut emit = |text: &str| {
                 if text.is_empty() { return; }
                 if let Ok(mut b) = buf.lock() { b.push_str(text); }
@@ -77,31 +91,32 @@ fn run_codex_exec_stream(window: tauri::Window, prompt: String, cwd: Option<Stri
                 if chunk.is_empty() { continue; }
                 let chunk = strip_ansi(&chunk);
                 acc.push_str(&chunk);
-                // process complete lines to find markers, but also emit partials once capturing
+                // process complete lines; emit non-meta only after assistant marker
                 loop {
                     if let Some(pos) = acc.find('\n') {
-                        let mut line = acc[..pos].to_string();
+                        let line = acc[..pos].to_string();
                         // remove the processed part including the newline
                         acc.drain(..=pos);
                         if ended { continue; }
-                        if !capture {
-                            if line.contains("] codex") { capture = true; continue; }
-                            // Skip banner and user instructions before capture starts
-                            continue;
-                        }
-                        // In capture mode
                         let ls = line.trim_start();
-                        if is_timestamp_line(&line) || ls.starts_with("tokens used:") {
+                        // Detect assistant phase marker and begin streaming content after it
+                        if !started_content && line.contains("] codex") {
+                            started_content = true;
+                            continue; // do not emit the marker line
+                        }
+                        if ls.starts_with("tokens used:") {
                             ended = true; continue;
                         }
-                        // emit line plus newline to preserve structure
+                        if !started_content || is_meta_line(&line) {
+                            continue;
+                        }
                         emit(&format!("{}\n", line));
                     } else {
                         break;
                     }
                 }
-                // Emit any partial tail without newline only after capture started
-                if capture && !ended && !acc.is_empty() {
+                // Emit any partial tail without newline only after real content started
+                if started_content && !ended && !acc.is_empty() {
                     emit(&acc);
                     acc.clear();
                 }
