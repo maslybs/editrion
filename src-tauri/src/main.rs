@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio, Child};
 use std::time::{Duration, Instant};
+use std::io::{BufRead, BufReader};
 
 #[tauri::command]
 fn read_file(path: String) -> Result<String, String> {
@@ -20,6 +21,116 @@ async fn codex_exec(prompt: String, cwd: Option<String>) -> Result<String, Strin
     tauri::async_runtime::spawn_blocking(move || run_codex_exec(prompt, cwd))
         .await
         .map_err(|e| format!("Failed to join codex worker: {}", e))?
+}
+
+#[tauri::command]
+async fn codex_exec_stream(window: tauri::Window, prompt: String, cwd: Option<String>, run_id: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || run_codex_exec_stream(window, prompt, cwd, run_id))
+        .await
+        .map_err(|e| format!("Failed to join codex stream worker: {}", e))?
+}
+
+fn run_codex_exec_stream(window: tauri::Window, prompt: String, cwd: Option<String>, run_id: String) -> Result<(), String> {
+    let spawn = || -> std::io::Result<Child> {
+        if let Some(codex_bin) = resolve_codex_path() {
+            let mut cmd = Command::new(&codex_bin);
+            cmd.arg("exec").arg("--skip-git-repo-check").arg(&prompt);
+            if let Some(ref dir) = cwd { if Path::new(dir).is_dir() { let _ = cmd.current_dir(dir); } }
+            cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+            return cmd.spawn();
+        }
+        let cmdline = format!("codex exec --skip-git-repo-check {}", shell_quote(&prompt));
+        let mut cmd = Command::new("/bin/zsh");
+        cmd.arg("-lc").arg(&cmdline);
+        if let Some(ref dir) = cwd { if Path::new(dir).is_dir() { let _ = cmd.current_dir(dir); } }
+        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+        cmd.spawn()
+    };
+
+    let mut child = spawn().map_err(|e| e.to_string())?;
+    use std::sync::{Arc, Mutex};
+    let stdout_buf = Arc::new(Mutex::new(String::new()));
+    let mut join_handles = vec![];
+
+    if let Some(mut out) = child.stdout.take() {
+        let win = window.clone();
+        let rid = run_id.clone();
+        let buf = stdout_buf.clone();
+        let h = std::thread::spawn(move || {
+            use std::io::Read;
+            let mut tmp = [0u8; 2048];
+            let mut acc = String::new();
+            let mut capture = false;
+            let mut ended = false;
+            let mut emit = |text: &str| {
+                if text.is_empty() { return; }
+                if let Ok(mut b) = buf.lock() { b.push_str(text); }
+                let _ = win.emit("codex-stream", &serde_json::json!({
+                    "runId": rid,
+                    "channel": "stdout",
+                    "data": text,
+                }));
+            };
+            while let Ok(n) = out.read(&mut tmp) {
+                if n == 0 { break; }
+                let chunk = String::from_utf8_lossy(&tmp[..n]).to_string();
+                if chunk.is_empty() { continue; }
+                let chunk = strip_ansi(&chunk);
+                acc.push_str(&chunk);
+                // process complete lines to find markers, but also emit partials once capturing
+                loop {
+                    if let Some(pos) = acc.find('\n') {
+                        let mut line = acc[..pos].to_string();
+                        // remove the processed part including the newline
+                        acc.drain(..=pos);
+                        if ended { continue; }
+                        if !capture {
+                            if line.contains("] codex") { capture = true; continue; }
+                            // Skip banner and user instructions before capture starts
+                            continue;
+                        }
+                        // In capture mode
+                        let ls = line.trim_start();
+                        if is_timestamp_line(&line) || ls.starts_with("tokens used:") {
+                            ended = true; continue;
+                        }
+                        // emit line plus newline to preserve structure
+                        emit(&format!("{}\n", line));
+                    } else {
+                        break;
+                    }
+                }
+                // Emit any partial tail without newline only after capture started
+                if capture && !ended && !acc.is_empty() {
+                    emit(&acc);
+                    acc.clear();
+                }
+            }
+        });
+        join_handles.push(h);
+    }
+    // Do not forward stderr to UI to avoid exposing system noise.
+
+    let status = child.wait().map_err(|e| e.to_string())?;
+    for h in join_handles { let _ = h.join(); }
+
+    let cleaned = if let Ok(b) = stdout_buf.lock() { clean_codex_output(&b) } else { String::new() };
+    if status.success() {
+        let _ = window.emit("codex-complete", &serde_json::json!({
+            "runId": run_id,
+            "ok": true,
+            "output": cleaned,
+        }));
+        Ok(())
+    } else {
+        let err_s = if let Ok(b) = stdout_buf.lock() { b.clone() } else { String::new() };
+        let _ = window.emit("codex-complete", &serde_json::json!({
+            "runId": run_id,
+            "ok": false,
+            "error": err_s,
+        }));
+        Err("codex exec failed".to_string())
+    }
 }
 
 fn run_codex_exec(prompt: String, cwd: Option<String>) -> Result<String, String> {
@@ -60,11 +171,121 @@ fn run_codex_exec(prompt: String, cwd: Option<String>) -> Result<String, String>
     }
 }
 
+#[tauri::command]
+async fn codex_login_stream(window: tauri::Window, run_id: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || run_codex_login_stream(window, run_id))
+        .await
+        .map_err(|e| format!("Failed to join codex login stream worker: {}", e))?
+}
+
+fn run_codex_login_stream(window: tauri::Window, run_id: String) -> Result<(), String> {
+    let spawn = || -> std::io::Result<Child> {
+        if let Some(codex_bin) = resolve_codex_path() {
+            let mut cmd = Command::new(&codex_bin);
+            cmd.arg("login");
+            cmd.stdin(Stdio::inherit()).stdout(Stdio::piped()).stderr(Stdio::piped());
+            return cmd.spawn();
+        }
+        let mut cmd = Command::new("/bin/zsh");
+        cmd.arg("-lc").arg("codex login");
+        cmd.stdin(Stdio::inherit()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        cmd.spawn()
+    };
+
+    let mut child = spawn().map_err(|e| e.to_string())?;
+    use std::sync::{Arc, Mutex};
+    let stdout_buf = Arc::new(Mutex::new(String::new()));
+    let mut join_handles = vec![];
+
+    if let Some(out) = child.stdout.take() {
+        let win = window.clone();
+        let rid = run_id.clone();
+        let buf = stdout_buf.clone();
+        let h = std::thread::spawn(move || {
+            let reader = BufReader::new(out);
+            let mut capture = false;
+            let mut ended = false;
+            for line in reader.split(b'\n') {
+                match line {
+                    Ok(bytes) => {
+                        if ended { continue; }
+                        let mut s = String::from_utf8_lossy(&bytes).to_string();
+                        if s.is_empty() { continue; }
+                        s = strip_ansi(&s);
+                        if !capture {
+                            if s.contains("] codex") { capture = true; continue; }
+                            continue;
+                        }
+                        let ls = s.trim_start();
+                        if is_timestamp_line(&s) || ls.starts_with("tokens used:") {
+                            ended = true; continue;
+                        }
+                        if let Ok(mut b) = buf.lock() { b.push_str(&s); b.push('\n'); }
+                        let _ = win.emit("codex-stream", &serde_json::json!({
+                            "runId": rid,
+                            "channel": "stdout",
+                            "data": s,
+                        }));
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+        join_handles.push(h);
+    }
+    // Don’t forward stderr to UI for login either.
+
+    let status = child.wait().map_err(|e| e.to_string())?;
+    for h in join_handles { let _ = h.join(); }
+
+    if status.success() {
+        let _ = window.emit("codex-complete", &serde_json::json!({
+            "runId": run_id,
+            "ok": true,
+            "output": "",
+        }));
+        Ok(())
+    } else {
+        let err_s = if let Ok(b) = stdout_buf.lock() { b.clone() } else { String::new() };
+        let _ = window.emit("codex-complete", &serde_json::json!({
+            "runId": run_id,
+            "ok": false,
+            "error": err_s,
+        }));
+        Err("codex login failed".to_string())
+    }
+}
+
 fn resolve_codex_path() -> Option<std::path::PathBuf> {
     // 1) Respect CODEX_BIN if set and exists
     if let Ok(p) = std::env::var("CODEX_BIN") {
         let path = std::path::PathBuf::from(p);
         if path.exists() { return Some(path); }
+    }
+    // 1.1) Check app data vendor bin (cross‑platform without tauri::api)
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(local) = std::env::var("LOCALAPPDATA") {
+            let p = std::path::PathBuf::from(local).join("Editrion").join("bin").join("codex.exe");
+            if p.exists() { return Some(p); }
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(home) = std::env::var("HOME") {
+            let p = std::path::PathBuf::from(home).join("Library").join("Application Support").join("Editrion").join("bin").join("codex");
+            if p.exists() { return Some(p); }
+        }
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let base = std::env::var("XDG_CONFIG_HOME").ok()
+            .map(std::path::PathBuf::from)
+            .or_else(|| std::env::var("HOME").ok().map(|h| std::path::PathBuf::from(h).join(".config")));
+        if let Some(base) = base {
+            let p = base.join("Editrion").join("bin").join("codex");
+            if p.exists() { return Some(p); }
+        }
     }
     // 2) Try common locations (macOS Homebrew /usr/local)
     let candidates = [
@@ -428,7 +649,7 @@ fn main() {
                 let _ = window.emit("menu-event", id);
             }
         })
-        .invoke_handler(tauri::generate_handler![read_file, write_file, read_dir, create_new_file, menu_action, quit_app, rebuild_menu, drafts_dir, remove_file, clear_dir, codex_exec])
+        .invoke_handler(tauri::generate_handler![read_file, write_file, read_dir, create_new_file, menu_action, quit_app, rebuild_menu, drafts_dir, remove_file, clear_dir, codex_exec, codex_exec_stream, codex_login_stream])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 

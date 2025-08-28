@@ -543,7 +543,8 @@ class Editrion {
       fontFamily: 'Consolas, Monaco, Menlo, "Ubuntu Mono", monospace',
       minimap: { enabled: true },
       scrollBeyondLastLine: false,
-      wordWrap: 'off',
+      wordWrap: 'bounded',
+      wordWrapColumn: 120,
       folding: true,
       renderWhitespace: 'selection',
       multiCursorModifier: 'ctrlCmd',
@@ -594,17 +595,144 @@ class Editrion {
           const parts = tab.path.split(/[/\\]/); parts.pop(); cwd = parts.join('/');
         } else if (this.projectRoots.length > 0) { cwd = this.projectRoots[0]; }
         const prompt = `${instruction}\n\n--- INPUT START ---\n${selected}\n--- INPUT END ---\n\nReturn only the transformed text.`;
-        // Show lightweight inline loader in status bar
-        const status = this.showInlineStatus(t('status.runningCodex') || 'Running AI…');
-        invoke<string>('codex_exec', { prompt, cwd })
-          .then((output) => {
-            if (sel && model) {
-              editor.executeEdits('codex', [{ range: sel, text: output, forceMoveMarkers: true }]);
-              editor.focus();
+        // Minimal status overlay with loader
+        const streamBox = document.createElement('div');
+        streamBox.style.position = 'fixed';
+        streamBox.style.bottom = '10px';
+        streamBox.style.right = '10px';
+        streamBox.style.display = 'flex';
+        streamBox.style.alignItems = 'center';
+        streamBox.style.gap = '8px';
+        streamBox.style.padding = '8px 10px';
+        streamBox.style.background = 'rgba(0,0,0,0.75)';
+        streamBox.style.color = '#fff';
+        streamBox.style.borderRadius = '8px';
+        streamBox.style.font = '12px/1.4 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto';
+        streamBox.style.zIndex = '9999';
+        const spinner = document.createElement('div');
+        spinner.style.width = '12px';
+        spinner.style.height = '12px';
+        spinner.style.border = '2px solid rgba(255,255,255,0.35)';
+        spinner.style.borderTopColor = '#fff';
+        spinner.style.borderRadius = '50%';
+        spinner.style.animation = 'editrion-spin 0.8s linear infinite';
+        const label = document.createElement('span');
+        label.textContent = t('status.runningCodex') || 'Running AI…';
+        streamBox.appendChild(spinner);
+        streamBox.appendChild(label);
+        document.body.appendChild(streamBox);
+        // spinner keyframes
+        const styleEl = document.createElement('style');
+        styleEl.textContent = '@keyframes editrion-spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}';
+        document.head.appendChild(styleEl);
+
+        const runId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+        let outBuf = '';
+        const originalSelected = selected;
+        // Prepare streaming insertion: replace selection with nothing, then append chunks at that position
+        let insertOffset = 0;
+        if (sel && model) {
+          const start = sel.getStartPosition();
+          insertOffset = model.getOffsetAt(start);
+          // remove current selection so we insert fresh content
+          editor.executeEdits('codex', [{ range: sel, text: '', forceMoveMarkers: true }]);
+        }
+        // Helper: split to smaller chunks for smoother streaming inserts (no extra newlines added)
+        function chunkForInsert(s: string, size = 64): string[] {
+          const chunks: string[] = [];
+          let i = 0;
+          while (i < s.length) {
+            const upto = Math.min(i + size, s.length);
+            chunks.push(s.slice(i, upto));
+            i = upto;
+          }
+          return chunks;
+        }
+        const unsubs: Array<() => void> = [];
+        const addUnsub = (fn: () => void) => unsubs.push(fn);
+
+        const onStream = await listen<any>('codex-stream', (ev) => {
+          const p = ev.payload as { runId?: string; channel?: 'stdout'|'stderr'; data?: string };
+          if (!p || p.runId !== runId) return;
+          if (p.channel !== 'stdout') return; // hide system output
+          let text = (p.data || '');
+          if (!text) return;
+          // Normalize CRLF only; no manual wrapping, let Monaco handle word-wrap
+          text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+          outBuf += text;
+          if (!model) return;
+          const segments = chunkForInsert(text);
+          const edits: monaco.editor.IIdentifiedSingleEditOperation[] = [];
+          for (const seg of segments) {
+            const pos = model.getPositionAt(insertOffset);
+            edits.push({
+              range: new monaco.Range(pos.lineNumber, pos.column, pos.lineNumber, pos.column),
+              text: seg,
+              forceMoveMarkers: true,
+            });
+            insertOffset += seg.length;
+          }
+          if (edits.length) editor.executeEdits('codex', edits);
+        });
+        addUnsub(() => { onStream(); });
+
+        const onDone = await listen<any>('codex-complete', (ev) => {
+          const p = ev.payload as { runId?: string; ok?: boolean; output?: string; error?: string };
+          if (!p || p.runId !== runId) return;
+          // cleanup listeners
+          unsubs.forEach(fn => fn());
+          if (p.ok) {
+            const result = (p.output ?? '').trim();
+            // If we didn’t receive any stream (fallback), insert final output
+            if (model && outBuf.trim() === '') {
+              const finalText = result.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+              const segments = chunkForInsert(finalText);
+              const edits: monaco.editor.IIdentifiedSingleEditOperation[] = [];
+              for (const seg of segments) {
+                const pos = model.getPositionAt(insertOffset);
+                edits.push({
+                  range: new monaco.Range(pos.lineNumber, pos.column, pos.lineNumber, pos.column),
+                  text: seg,
+                  forceMoveMarkers: true,
+                });
+                insertOffset += seg.length;
+              }
+              if (edits.length) editor.executeEdits('codex', edits);
             }
-          })
-          .catch((e) => alert('Codex failed: ' + String(e)))
-          .finally(() => status.remove());
+            editor.focus();
+          } else {
+            // Keep editor clean; show a small non-modal notification
+            console.warn('Codex failed:', p.error || 'unknown error');
+            // Restore original selection if possible
+            if (model && sel && typeof originalSelected === 'string') {
+              const pos = model.getPositionAt(insertOffset);
+              // Insert back original text at the original start point
+              const start = sel.getStartPosition();
+              const startOffset = model.getOffsetAt(start);
+              const curPos = model.getPositionAt(startOffset);
+              editor.executeEdits('codex', [{
+                range: new monaco.Range(curPos.lineNumber, curPos.column, curPos.lineNumber, curPos.column),
+                text: originalSelected,
+                forceMoveMarkers: true,
+              }]);
+            }
+          }
+          streamBox.remove();
+        });
+        addUnsub(() => { onDone(); });
+
+        // Prefer streaming; fall back to non-streaming if command unavailable
+        invoke('codex_exec_stream', { prompt, cwd, runId }).catch(async () => {
+          // Old path
+          const output = await invoke<string>('codex_exec', { prompt, cwd }).catch(e => { throw e; });
+          unsubs.forEach(fn => fn());
+          if (model && sel) {
+            // Replace selection with final output (legacy path)
+            editor.executeEdits('codex', [{ range: sel, text: softWrapText(output), forceMoveMarkers: true }]);
+            editor.focus();
+          }
+          streamBox.remove();
+        });
       }
     });
     
