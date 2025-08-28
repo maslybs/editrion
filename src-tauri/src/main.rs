@@ -1,12 +1,17 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, Manager, State};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio, Child};
 use std::time::{Duration, Instant};
 use std::io::{BufRead, BufReader};
+use std::sync::{Arc, Mutex};
+
+struct AppState {
+    procs: Arc<Mutex<HashMap<String, Arc<Mutex<Child>>>>>,
+}
 
 #[tauri::command]
 fn read_file(path: String) -> Result<String, String> {
@@ -24,13 +29,14 @@ async fn codex_exec(prompt: String, cwd: Option<String>) -> Result<String, Strin
 }
 
 #[tauri::command]
-async fn codex_exec_stream(window: tauri::Window, prompt: String, cwd: Option<String>, run_id: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || run_codex_exec_stream(window, prompt, cwd, run_id))
+async fn codex_exec_stream(state: State<'_, AppState>, window: tauri::Window, prompt: String, cwd: Option<String>, run_id: String) -> Result<(), String> {
+    let procs_map = state.procs.clone();
+    tauri::async_runtime::spawn_blocking(move || run_codex_exec_stream(procs_map, window, prompt, cwd, run_id))
         .await
         .map_err(|e| format!("Failed to join codex stream worker: {}", e))?
 }
 
-fn run_codex_exec_stream(window: tauri::Window, prompt: String, cwd: Option<String>, run_id: String) -> Result<(), String> {
+fn run_codex_exec_stream(procs_map: Arc<Mutex<HashMap<String, Arc<Mutex<Child>>>>>, window: tauri::Window, prompt: String, cwd: Option<String>, run_id: String) -> Result<(), String> {
     let spawn = || -> std::io::Result<Child> {
         let use_pty = std::env::var("CODEX_STREAM_PTY").map(|v| v != "0").unwrap_or(true);
         #[cfg(not(target_os = "windows"))]
@@ -69,12 +75,19 @@ fn run_codex_exec_stream(window: tauri::Window, prompt: String, cwd: Option<Stri
         cmd.spawn()
     };
 
-    let mut child = spawn().map_err(|e| e.to_string())?;
-    use std::sync::{Arc, Mutex};
+    let child = spawn().map_err(|e| e.to_string())?;
+    let child_arc = Arc::new(Mutex::new(child));
+    // register process for cancellation
+    {
+        if let Ok(mut m) = procs_map.lock() {
+            m.insert(run_id.clone(), child_arc.clone());
+        }
+    }
     let stdout_buf = Arc::new(Mutex::new(String::new()));
     let mut join_handles = vec![];
 
-    if let Some(mut out) = child.stdout.take() {
+    let mut out = { child_arc.lock().ok().and_then(|mut c| c.stdout.take()) };
+    if let Some(mut out) = out.take() {
         let win = window.clone();
         let rid = run_id.clone();
         let buf = stdout_buf.clone();
@@ -148,8 +161,11 @@ fn run_codex_exec_stream(window: tauri::Window, prompt: String, cwd: Option<Stri
     }
     // Do not forward stderr to UI to avoid exposing system noise.
 
-    let status = child.wait().map_err(|e| e.to_string())?;
+    let status = { child_arc.lock().map_err(|e| e.to_string())?.wait().map_err(|e| e.to_string())? };
     for h in join_handles { let _ = h.join(); }
+
+    // unregister process
+    if let Ok(mut m) = procs_map.lock() { m.remove(&run_id); }
 
     let cleaned = if let Ok(b) = stdout_buf.lock() { clean_codex_output(&b) } else { String::new() };
     if status.success() {
@@ -291,6 +307,19 @@ fn run_codex_login_stream(window: tauri::Window, run_id: String) -> Result<(), S
         }));
         Err("codex login failed".to_string())
     }
+}
+
+#[tauri::command]
+fn codex_cancel(state: State<'_, AppState>, run_id: String) -> Result<(), String> {
+    if let Ok(mut map) = state.procs.lock() {
+        if let Some(child_arc) = map.get(&run_id) {
+            if let Ok(mut child) = child_arc.lock() {
+                let _ = child.kill();
+                return Ok(());
+            }
+        }
+    }
+    Err("No running codex process for given runId".to_string())
 }
 
 fn resolve_codex_path() -> Option<std::path::PathBuf> {
@@ -547,6 +576,7 @@ fn clear_dir(path: String) -> Result<(), String> {
 
 fn main() {
     let app = tauri::Builder::default()
+        .manage(AppState { procs: Arc::new(Mutex::new(HashMap::new())) })
         .plugin(tauri_plugin_dialog::init())
         .on_window_event(|window, event| {
             match event {
@@ -686,7 +716,7 @@ fn main() {
                 let _ = window.emit("menu-event", id);
             }
         })
-        .invoke_handler(tauri::generate_handler![read_file, write_file, read_dir, create_new_file, menu_action, quit_app, rebuild_menu, drafts_dir, remove_file, clear_dir, codex_exec, codex_exec_stream, codex_login_stream])
+        .invoke_handler(tauri::generate_handler![read_file, write_file, read_dir, create_new_file, menu_action, quit_app, rebuild_menu, drafts_dir, remove_file, clear_dir, codex_exec, codex_exec_stream, codex_login_stream, codex_cancel])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 

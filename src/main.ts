@@ -618,8 +618,19 @@ class Editrion {
         spinner.style.animation = 'editrion-spin 0.8s linear infinite';
         const label = document.createElement('span');
         label.textContent = t('status.runningCodex') || 'Running AI…';
+        const btnCancel = document.createElement('button');
+        btnCancel.textContent = t('button.cancel') || 'Cancel';
+        btnCancel.style.marginLeft = '6px';
+        btnCancel.style.padding = '4px 8px';
+        btnCancel.style.fontSize = '12px';
+        btnCancel.style.borderRadius = '6px';
+        btnCancel.style.border = '1px solid rgba(255,255,255,0.25)';
+        btnCancel.style.background = 'transparent';
+        btnCancel.style.color = '#fff';
+        btnCancel.style.cursor = 'pointer';
         streamBox.appendChild(spinner);
         streamBox.appendChild(label);
+        streamBox.appendChild(btnCancel);
         document.body.appendChild(streamBox);
         // spinner keyframes
         const styleEl = document.createElement('style');
@@ -627,6 +638,7 @@ class Editrion {
         document.head.appendChild(styleEl);
 
         const runId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+        let canceled = false;
         let outBuf = '';
         const originalSelected = selected;
         const hasSelection = !!(sel && model && !sel.isEmpty() && originalSelected.length > 0);
@@ -709,9 +721,18 @@ class Editrion {
             // Keep editor clean; show a small non-modal notification
             console.warn('Codex failed:', p.error || 'unknown error');
           }
-          streamBox.remove();
+          if (p.ok || canceled) {
+            streamBox.remove();
+          } else {
+            // Keep the loader if it's a transient backend error but process continues elsewhere.
+            // Optionally, we could show a retry UI here.
+          }
         });
         addUnsub(() => { onDone(); });
+
+        btnCancel.addEventListener('click', async () => {
+          try { btnCancel.disabled = true; canceled = true; await invoke('codex_cancel', { runId }); } catch {}
+        });
 
         // Prefer streaming; fall back to non-streaming if command unavailable
         invoke('codex_exec_stream', { prompt, cwd, runId }).catch(async () => {
@@ -720,7 +741,8 @@ class Editrion {
           unsubs.forEach(fn => fn());
           if (model && sel) {
             // Replace selection with final output (legacy path)
-            editor.executeEdits('codex', [{ range: sel, text: softWrapText(output), forceMoveMarkers: true }]);
+            const normalized = output.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+            editor.executeEdits('codex', [{ range: sel, text: normalized, forceMoveMarkers: true }]);
             editor.focus();
           }
           streamBox.remove();
@@ -837,21 +859,7 @@ class Editrion {
     });
   }
 
-  private showInlineStatus(text: string) {
-    const el = document.createElement('div');
-    el.textContent = text;
-    el.style.position = 'fixed';
-    el.style.bottom = '10px';
-    el.style.right = '10px';
-    el.style.padding = '6px 10px';
-    el.style.background = 'rgba(0,0,0,0.6)';
-    el.style.color = '#fff';
-    el.style.borderRadius = '6px';
-    el.style.fontSize = '12px';
-    el.style.zIndex = '9999';
-    document.body.appendChild(el);
-    return { remove: () => el.remove() };
-  }
+  // removed legacy inline status helper (replaced by streaming overlay)
 
   // busy overlay removed; using inline status instead
 
