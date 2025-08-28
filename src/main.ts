@@ -629,13 +629,12 @@ class Editrion {
         const runId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
         let outBuf = '';
         const originalSelected = selected;
-        // Prepare streaming insertion: replace selection with nothing, then append chunks at that position
+        const hasSelection = !!(sel && model && !sel.isEmpty() && originalSelected.length > 0);
+        // Prepare insertion point at caret/start of selection; do not delete selection up-front
         let insertOffset = 0;
-        if (sel && model) {
-          const start = sel.getStartPosition();
-          insertOffset = model.getOffsetAt(start);
-          // remove current selection so we insert fresh content
-          editor.executeEdits('codex', [{ range: sel, text: '', forceMoveMarkers: true }]);
+        if (model) {
+          const startPos = sel ? sel.getStartPosition() : model.getPositionAt(model.getFullModelRange().getStartPosition().lineNumber);
+          insertOffset = model.getOffsetAt(startPos);
         }
         // Helper: split to smaller chunks for smoother streaming inserts (no extra newlines added)
         function chunkForInsert(s: string, size = 64): string[] {
@@ -661,18 +660,20 @@ class Editrion {
           text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
           outBuf += text;
           if (!model) return;
-          const segments = chunkForInsert(text);
-          const edits: monaco.editor.IIdentifiedSingleEditOperation[] = [];
-          for (const seg of segments) {
-            const pos = model.getPositionAt(insertOffset);
-            edits.push({
-              range: new monaco.Range(pos.lineNumber, pos.column, pos.lineNumber, pos.column),
-              text: seg,
-              forceMoveMarkers: true,
-            });
-            insertOffset += seg.length;
+          if (!hasSelection) {
+            const segments = chunkForInsert(text);
+            const edits: monaco.editor.IIdentifiedSingleEditOperation[] = [];
+            for (const seg of segments) {
+              const pos = model.getPositionAt(insertOffset);
+              edits.push({
+                range: new monaco.Range(pos.lineNumber, pos.column, pos.lineNumber, pos.column),
+                text: seg,
+                forceMoveMarkers: true,
+              });
+              insertOffset += seg.length;
+            }
+            if (edits.length) editor.executeEdits('codex', edits);
           }
-          if (edits.length) editor.executeEdits('codex', edits);
         });
         addUnsub(() => { onStream(); });
 
@@ -683,9 +684,13 @@ class Editrion {
           unsubs.forEach(fn => fn());
           if (p.ok) {
             const result = (p.output ?? '').trim();
-            // If we didn’t receive any stream (fallback), insert final output
-            if (model && outBuf.trim() === '') {
-              const finalText = result.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+            if (!model) return;
+            const finalText = (outBuf.trim() ? outBuf : result).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+            if (hasSelection && sel) {
+              // Replace selection once final text ready
+              editor.executeEdits('codex', [{ range: sel, text: finalText, forceMoveMarkers: true }]);
+            } else if (outBuf.trim() === '') {
+              // No progressive stream used; insert final text at caret
               const segments = chunkForInsert(finalText);
               const edits: monaco.editor.IIdentifiedSingleEditOperation[] = [];
               for (const seg of segments) {
@@ -703,19 +708,6 @@ class Editrion {
           } else {
             // Keep editor clean; show a small non-modal notification
             console.warn('Codex failed:', p.error || 'unknown error');
-            // Restore original selection if possible
-            if (model && sel && typeof originalSelected === 'string') {
-              const pos = model.getPositionAt(insertOffset);
-              // Insert back original text at the original start point
-              const start = sel.getStartPosition();
-              const startOffset = model.getOffsetAt(start);
-              const curPos = model.getPositionAt(startOffset);
-              editor.executeEdits('codex', [{
-                range: new monaco.Range(curPos.lineNumber, curPos.column, curPos.lineNumber, curPos.column),
-                text: originalSelected,
-                forceMoveMarkers: true,
-              }]);
-            }
           }
           streamBox.remove();
         });

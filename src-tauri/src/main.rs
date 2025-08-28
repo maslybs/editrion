@@ -32,6 +32,27 @@ async fn codex_exec_stream(window: tauri::Window, prompt: String, cwd: Option<St
 
 fn run_codex_exec_stream(window: tauri::Window, prompt: String, cwd: Option<String>, run_id: String) -> Result<(), String> {
     let spawn = || -> std::io::Result<Child> {
+        let use_pty = std::env::var("CODEX_STREAM_PTY").map(|v| v != "0").unwrap_or(true);
+        #[cfg(not(target_os = "windows"))]
+        if use_pty {
+            // Try to wrap with 'script' to allocate a PTY for faster flushes
+            if let Some(codex_bin) = resolve_codex_path() {
+                let mut cmd = Command::new("/usr/bin/script");
+                cmd.arg("-q").arg("/dev/null");
+                cmd.arg(&codex_bin).arg("exec").arg("--skip-git-repo-check").arg(&prompt);
+                if let Some(ref dir) = cwd { if Path::new(dir).is_dir() { let _ = cmd.current_dir(dir); } }
+                cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+                if let Ok(child) = cmd.spawn() { return Ok(child); }
+            }
+            // PTY via zsh login shell
+            let cmdline = format!("codex exec --skip-git-repo-check {}", shell_quote(&prompt));
+            let mut cmd = Command::new("/usr/bin/script");
+            cmd.arg("-q").arg("/dev/null").arg("/bin/zsh").arg("-lc").arg(&cmdline);
+            if let Some(ref dir) = cwd { if Path::new(dir).is_dir() { let _ = cmd.current_dir(dir); } }
+            cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+            if let Ok(child) = cmd.spawn() { return Ok(child); }
+        }
+        // Fallback: direct spawn
         if let Some(codex_bin) = resolve_codex_path() {
             let mut cmd = Command::new(&codex_bin);
             cmd.arg("exec").arg("--skip-git-repo-check").arg(&prompt);
@@ -39,6 +60,7 @@ fn run_codex_exec_stream(window: tauri::Window, prompt: String, cwd: Option<Stri
             cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
             return cmd.spawn();
         }
+        // Fallback via login shell PATH
         let cmdline = format!("codex exec --skip-git-repo-check {}", shell_quote(&prompt));
         let mut cmd = Command::new("/bin/zsh");
         cmd.arg("-lc").arg(&cmdline);
