@@ -1911,7 +1911,6 @@ class Editrion {
         }
       }
       this.updateWelcomeState();
-      alert(t('info.restoredDrafts'));
     } catch (e) {
       console.warn('Failed to scan drafts dir', e);
     }

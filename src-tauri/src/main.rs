@@ -39,19 +39,28 @@ async fn codex_exec_stream(state: State<'_, AppState>, window: tauri::Window, pr
 fn run_codex_exec_stream(procs_map: Arc<Mutex<HashMap<String, Arc<Mutex<Child>>>>>, window: tauri::Window, prompt: String, cwd: Option<String>, run_id: String) -> Result<(), String> {
     let spawn = || -> std::io::Result<Child> {
         let use_pty = std::env::var("CODEX_STREAM_PTY").map(|v| v != "0").unwrap_or(true);
+        let prefer_tui = std::env::var("CODEX_STREAM_TUI").map(|v| v != "0").unwrap_or(true);
         #[cfg(not(target_os = "windows"))]
         if use_pty {
             // Try to wrap with 'script' to allocate a PTY for faster flushes
             if let Some(codex_bin) = resolve_codex_path() {
                 let mut cmd = Command::new("/usr/bin/script");
                 cmd.arg("-q").arg("/dev/null");
-                cmd.arg(&codex_bin).arg("exec").arg("--skip-git-repo-check").arg(&prompt);
+                if prefer_tui {
+                    cmd.arg(&codex_bin).arg(&prompt);
+                } else {
+                    cmd.arg(&codex_bin).arg("exec").arg("--skip-git-repo-check").arg(&prompt);
+                }
                 if let Some(ref dir) = cwd { if Path::new(dir).is_dir() { let _ = cmd.current_dir(dir); } }
                 cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
                 if let Ok(child) = cmd.spawn() { return Ok(child); }
             }
             // PTY via zsh login shell
-            let cmdline = format!("codex exec --skip-git-repo-check {}", shell_quote(&prompt));
+            let cmdline = if prefer_tui {
+                format!("codex {}", shell_quote(&prompt))
+            } else {
+                format!("codex exec --skip-git-repo-check {}", shell_quote(&prompt))
+            };
             let mut cmd = Command::new("/usr/bin/script");
             cmd.arg("-q").arg("/dev/null").arg("/bin/zsh").arg("-lc").arg(&cmdline);
             if let Some(ref dir) = cwd { if Path::new(dir).is_dir() { let _ = cmd.current_dir(dir); } }
@@ -61,13 +70,21 @@ fn run_codex_exec_stream(procs_map: Arc<Mutex<HashMap<String, Arc<Mutex<Child>>>
         // Fallback: direct spawn
         if let Some(codex_bin) = resolve_codex_path() {
             let mut cmd = Command::new(&codex_bin);
-            cmd.arg("exec").arg("--skip-git-repo-check").arg(&prompt);
+            if prefer_tui {
+                cmd.arg(&prompt);
+            } else {
+                cmd.arg("exec").arg("--skip-git-repo-check").arg(&prompt);
+            }
             if let Some(ref dir) = cwd { if Path::new(dir).is_dir() { let _ = cmd.current_dir(dir); } }
             cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
             return cmd.spawn();
         }
         // Fallback via login shell PATH
-        let cmdline = format!("codex exec --skip-git-repo-check {}", shell_quote(&prompt));
+        let cmdline = if prefer_tui {
+            format!("codex {}", shell_quote(&prompt))
+        } else {
+            format!("codex exec --skip-git-repo-check {}", shell_quote(&prompt))
+        };
         let mut cmd = Command::new("/bin/zsh");
         cmd.arg("-lc").arg(&cmdline);
         if let Some(ref dir) = cwd { if Path::new(dir).is_dir() { let _ = cmd.current_dir(dir); } }
@@ -95,23 +112,45 @@ fn run_codex_exec_stream(procs_map: Arc<Mutex<HashMap<String, Arc<Mutex<Child>>>
             use std::io::Read;
             let mut tmp = [0u8; 2048];
             let mut acc = String::new();
-            let mut ended = false;
+            // prefer TUI: start streaming as soon as a non-meta chunk arrives
+            let prefer_tui = std::env::var("CODEX_STREAM_TUI").map(|v| v != "0").unwrap_or(true);
             let mut started_content = false;
             fn is_meta_line(line: &str) -> bool {
                 let ls = line.trim();
                 if ls.is_empty() { return false; }
-                if is_timestamp_line(ls) { return true; }
+                // Stricter timestamp detection like [YYYY-MM-DDThh:..]
+                if ls.starts_with('[') {
+                    if let Some(end) = ls.find(']') {
+                        let inside = &ls[1..end];
+                        if inside.len() >= 10 && inside.chars().take(4).all(|c| c.is_ascii_digit()) && inside.chars().nth(4) == Some('-') {
+                            return true;
+                        }
+                    }
+                }
                 if ls.starts_with("--------") { return true; }
                 if ls.contains("OpenAI Codex") { return true; }
                 let prefixes = [
                     "workdir:", "model:", "provider:", "approval:", "sandbox:",
                     "reasoning", "User instructions:", "--- INPUT START", "--- INPUT END",
-                    "Return only the transformed text.",
                 ];
                 for p in prefixes { if ls.starts_with(p) { return true; } }
+                if ls.starts_with("tokens used:") { return true; }
                 false
             }
-            let mut emit = |text: &str| {
+            fn is_noise_line(line: &str) -> bool {
+                let ls = line.trim();
+                if ls.is_empty() { return true; }
+                let lower = ls.to_lowercase();
+                // Suppress TTY/cursor probe errors some TUIs print to stdout
+                if lower.contains("cursor position could not be read") { return true; }
+                if lower.contains("could not read cursor position") { return true; }
+                // Sometimes control-D/EOT gets echoed as a literal or caret notation
+                if ls == "^D" { return true; }
+                // Hide generic prompt read failures
+                if lower.starts_with("error:") && lower.contains("cursor") { return true; }
+                false
+            }
+            let emit = |text: &str| {
                 if text.is_empty() { return; }
                 if let Ok(mut b) = buf.lock() { b.push_str(text); }
                 let _ = win.emit("codex-stream", &serde_json::json!({
@@ -132,27 +171,66 @@ fn run_codex_exec_stream(procs_map: Arc<Mutex<HashMap<String, Arc<Mutex<Child>>>
                         let line = acc[..pos].to_string();
                         // remove the processed part including the newline
                         acc.drain(..=pos);
-                        if ended { continue; }
                         let ls = line.trim_start();
-                        // Detect assistant phase marker and begin streaming content after it
-                        if !started_content && line.contains("] codex") {
-                            started_content = true;
-                            continue; // do not emit the marker line
+                        // Detect assistant phase marker; for TUI we also allow first non-meta to start streaming
+                        if !started_content {
+                            if line.contains("] codex") {
+                                started_content = true;
+                                if let Some(idx) = line.find("] codex") {
+                                    let mut rest = &line[idx + "] codex".len()..];
+                                    rest = rest.trim_start();
+                                    if !rest.is_empty() { emit(&format!("{}\n", rest)); }
+                                }
+                                continue;
+                            }
+                            if prefer_tui && !is_meta_line(&line) {
+                                started_content = true;
+                                // fall through to emit the line below
+                            } else {
+                                continue;
+                            }
                         }
-                        if ls.starts_with("tokens used:") {
-                            ended = true; continue;
-                        }
-                        if !started_content || is_meta_line(&line) {
+                        // After content started, treat timestamped lines as content by stripping the prefix
+                        // Skip meta-only lines like summaries and banners
+                        if is_meta_line(&line) || is_noise_line(&line) {
                             continue;
                         }
-                        emit(&format!("{}\n", line));
+                        let content_line = if line.starts_with('[') {
+                            if let Some(end) = line.find(']') {
+                                let mut rest = &line[end + 1..];
+                                rest = rest.trim_start();
+                                if rest.starts_with("codex") {
+                                    rest = &rest["codex".len()..];
+                                    rest = rest.trim_start();
+                                }
+                                rest.to_string()
+                            } else { line.clone() }
+                        } else { line.clone() };
+                        if !content_line.is_empty() {
+                            emit(&format!("{}\n", content_line));
+                        }
                     } else {
                         break;
                     }
                 }
                 // Emit any partial tail without newline only after real content started
-                if started_content && !ended && !acc.is_empty() {
-                    emit(&acc);
+                if started_content && !acc.is_empty() {
+                    // If partial tail has a timestamp prefix and we haven't seen ']' yet, wait for completion
+                    if acc.starts_with('[') && acc.find(']').is_none() {
+                        continue;
+                    }
+                    let tail = if acc.starts_with('[') {
+                        if let Some(end) = acc.find(']') {
+                            let mut rest = &acc[end + 1..];
+                            rest = rest.trim_start();
+                            if rest.starts_with("codex") {
+                                rest = &rest["codex".len()..];
+                                rest = rest.trim_start();
+                            }
+                            rest.to_string()
+                        } else { acc.clone() }
+                    } else { acc.clone() };
+                    if !tail.is_empty() && !is_noise_line(&tail) { emit(&tail); }
                     acc.clear();
                 }
             }
@@ -311,7 +389,7 @@ fn run_codex_login_stream(window: tauri::Window, run_id: String) -> Result<(), S
 
 #[tauri::command]
 fn codex_cancel(state: State<'_, AppState>, run_id: String) -> Result<(), String> {
-    if let Ok(mut map) = state.procs.lock() {
+    if let Ok(map) = state.procs.lock() {
         if let Some(child_arc) = map.get(&run_id) {
             if let Ok(mut child) = child_arc.lock() {
                 let _ = child.kill();
@@ -448,6 +526,8 @@ fn strip_ansi(s: &str) -> String {
                 if c.is_ascii_alphabetic() { break; }
             }
         } else {
+            // Drop other C0 control chars (except common whitespace)
+            if ch.is_control() && ch != '\n' && ch != '\r' && ch != '\t' { continue; }
             out.push(ch);
         }
     }
@@ -457,6 +537,16 @@ fn strip_ansi(s: &str) -> String {
 fn extract_codex_result(s: &str) -> String {
     let mut capture = false;
     let mut out = String::new();
+    fn is_noise_line(line: &str) -> bool {
+        let ls = line.trim();
+        if ls.is_empty() { return true; }
+        let lower = ls.to_lowercase();
+        if lower.contains("cursor position could not be read") { return true; }
+        if lower.contains("could not read cursor position") { return true; }
+        if ls == "^D" { return true; }
+        if lower.starts_with("error:") && lower.contains("cursor") { return true; }
+        false
+    }
     for line in s.lines() {
         if !capture {
             if line.contains("] codex") {
@@ -470,6 +560,7 @@ fn extract_codex_result(s: &str) -> String {
             if is_timestamp_line(line) || ls.starts_with("tokens used:") {
                 break;
             }
+            if is_noise_line(line) { continue; }
             out.push_str(line);
             out.push('\n');
         }
@@ -479,6 +570,7 @@ fn extract_codex_result(s: &str) -> String {
         let mut filtered = String::new();
         for l in s.lines() {
             if is_timestamp_line(l) { continue; }
+            if is_noise_line(l) { continue; }
             filtered.push_str(l);
             filtered.push('\n');
         }
