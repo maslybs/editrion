@@ -40,3 +40,6 @@ src-tauri/gen/
 
 # Claude context files (if any)
 .claude/
+
+#other
+IMPROVEMENTS_TZ.md
