@@ -19,10 +19,10 @@ pub async fn codex_exec_stream(
     model: Option<String>,
     config: Option<HashMap<String, String>>,
 ) -> Result<()> {
-    let procs_map = state.procs.clone();
+    let process_manager = state.process_manager.clone();
     tauri::async_runtime::spawn_blocking(move || {
         run_external_cli_stream(
-            procs_map,
+            process_manager,
             window,
             "codex",
             prompt,
@@ -46,10 +46,10 @@ pub async fn claude_exec_stream(
     model: Option<String>,
     config: Option<HashMap<String, String>>,
 ) -> Result<()> {
-    let procs_map = state.procs.clone();
+    let process_manager = state.process_manager.clone();
     tauri::async_runtime::spawn_blocking(move || {
         run_external_cli_stream(
-            procs_map,
+            process_manager,
             window,
             "claude",
             prompt,
@@ -88,19 +88,15 @@ pub fn claude_cancel(state: State<'_, AppState>, run_id: String) -> Result<()> {
 }
 
 fn cancel_process(state: State<'_, AppState>, run_id: String) -> Result<()> {
-    if let Ok(map) = state.procs.lock() {
-        if let Some(child_arc) = map.get(&run_id) {
-            if let Ok(mut child) = child_arc.lock() {
-                let _ = child.kill();
-                return Ok(());
-            }
-        }
+    if let Ok(mut manager) = state.process_manager.lock() {
+        manager.cancel_process(&run_id)
+    } else {
+        Err(AppError::ProcessNotFound(run_id))
     }
-    Err(AppError::ProcessNotFound(run_id))
 }
 
 fn run_external_cli_stream(
-    procs_map: Arc<Mutex<HashMap<String, Arc<Mutex<Child>>>>>,
+    process_manager: std::sync::Arc<std::sync::Mutex<crate::core::process_manager::ProcessManager>>,
     window: Window,
     cli_name: &str,
     prompt: String,
@@ -164,9 +160,10 @@ fn run_external_cli_stream(
     let child = spawn().map_err(AppError::Io)?;
     let child_arc = Arc::new(Mutex::new(child));
 
+    // Register process for cancellation
     {
-        if let Ok(mut m) = procs_map.lock() {
-            m.insert(run_id.clone(), child_arc.clone());
+        if let Ok(mut manager) = process_manager.lock() {
+            manager.processes.insert(run_id.clone(), child_arc.clone());
         }
     }
 
@@ -228,8 +225,8 @@ fn run_external_cli_stream(
         let _ = h.join();
     }
 
-    if let Ok(mut m) = procs_map.lock() {
-        m.remove(&run_id);
+    if let Ok(mut manager) = process_manager.lock() {
+        manager.remove_process(&run_id);
     }
 
     let output_text = if let Ok(b) = stdout_buf.lock() {

@@ -1,15 +1,14 @@
-use std::collections::HashMap;
-use std::process::Child;
 use std::sync::{Arc, Mutex};
+use crate::core::process_manager::ProcessManager;
 
 pub struct AppState {
-    pub procs: Arc<Mutex<HashMap<String, Arc<Mutex<Child>>>>>,
+    pub process_manager: Arc<Mutex<ProcessManager>>,
 }
 
 impl AppState {
     pub fn new() -> Self {
         Self {
-            procs: Arc::new(Mutex::new(HashMap::new())),
+            process_manager: Arc::new(Mutex::new(ProcessManager::new())),
         }
     }
 }

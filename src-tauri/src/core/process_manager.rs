@@ -1,8 +1,54 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
+use std::sync::{Arc, Mutex};
 
-// This file will contain the logic for finding binaries, spawning processes,
-// and managing their lifecycle. The tauri commands will call into these functions.
+use crate::error::{AppError, Result};
+
+/// ProcessManager handles the lifecycle of external CLI processes
+pub struct ProcessManager {
+    pub processes: HashMap<String, Arc<Mutex<Child>>>,
+}
+
+impl ProcessManager {
+    pub fn new() -> Self {
+        Self {
+            processes: HashMap::new(),
+        }
+    }
+
+    /// Add a new process to management
+    pub fn add_process(&mut self, run_id: String, child: Child) {
+        let child_arc = Arc::new(Mutex::new(child));
+        self.processes.insert(run_id, child_arc);
+    }
+
+    /// Get a process by run_id
+    pub fn get_process(&self, run_id: &str) -> Option<Arc<Mutex<Child>>> {
+        self.processes.get(run_id).cloned()
+    }
+
+    /// Cancel a process by run_id
+    pub fn cancel_process(&mut self, run_id: &str) -> Result<()> {
+        if let Some(child_arc) = self.processes.remove(run_id) {
+            if let Ok(mut child) = child_arc.lock() {
+                let _ = child.kill();
+                return Ok(());
+            }
+        }
+        Err(AppError::ProcessNotFound(run_id.to_string()))
+    }
+
+    /// Remove a completed process
+    pub fn remove_process(&mut self, run_id: &str) {
+        self.processes.remove(run_id);
+    }
+
+    /// Get count of active processes
+    pub fn active_count(&self) -> usize {
+        self.processes.len()
+    }
+}
 
 pub fn resolve_binary_path(name: &str) -> Option<PathBuf> {
     // 1) Respect ENV_VAR if set and exists
@@ -66,5 +112,102 @@ pub fn shell_quote(s: &str) -> String {
 
 pub fn strip_ansi(s: &str) -> String {
     String::from_utf8(strip_ansi_escapes::strip(s.as_bytes())).unwrap_or_else(|_| s.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::process::{Command, Stdio};
+
+    #[test]
+    fn test_process_manager_new() {
+        let manager = ProcessManager::new();
+        assert_eq!(manager.active_count(), 0);
+    }
+
+    #[test]
+    fn test_process_manager_add_and_remove() {
+        let mut manager = ProcessManager::new();
+        
+        // Create a simple child process (sleep command)
+        let child = Command::new("sleep")
+            .arg("10")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("Failed to start sleep process");
+
+        manager.add_process("test_id".to_string(), child);
+        assert_eq!(manager.active_count(), 1);
+        assert!(manager.get_process("test_id").is_some());
+
+        manager.remove_process("test_id");
+        assert_eq!(manager.active_count(), 0);
+        assert!(manager.get_process("test_id").is_none());
+    }
+
+    #[test]
+    fn test_process_manager_cancel() {
+        let mut manager = ProcessManager::new();
+        
+        // Create a child process
+        let child = Command::new("sleep")
+            .arg("10")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("Failed to start sleep process");
+
+        manager.add_process("test_cancel".to_string(), child);
+        assert_eq!(manager.active_count(), 1);
+
+        // Cancel the process
+        let result = manager.cancel_process("test_cancel");
+        assert!(result.is_ok());
+        assert_eq!(manager.active_count(), 0);
+    }
+
+    #[test]
+    fn test_process_manager_cancel_nonexistent() {
+        let mut manager = ProcessManager::new();
+        let result = manager.cancel_process("nonexistent");
+        assert!(result.is_err());
+        if let Err(AppError::ProcessNotFound(id)) = result {
+            assert_eq!(id, "nonexistent");
+        } else {
+            panic!("Expected ProcessNotFound error");
+        }
+    }
+
+    #[test]
+    fn test_shell_quote() {
+        assert_eq!(shell_quote("hello"), "'hello'");
+        assert_eq!(shell_quote("hello world"), "'hello world'");
+        assert_eq!(shell_quote("it's working"), "'it'\\'''s working'");
+        assert_eq!(shell_quote(""), "''");
+    }
+
+    #[test]
+    fn test_strip_ansi() {
+        // Test normal string
+        assert_eq!(strip_ansi("hello world"), "hello world");
+        
+        // Test string with ANSI escape codes
+        let ansi_string = "\x1b[31mRed text\x1b[0m";
+        let clean = strip_ansi(ansi_string);
+        assert!(!clean.contains("\x1b"));
+        assert!(clean.contains("Red text"));
+    }
+
+    #[test]
+    fn test_resolve_binary_path() {
+        // Test with a binary that likely exists on most systems
+        let result = resolve_binary_path("sh");
+        assert!(result.is_some());
+        
+        // Test with nonexistent binary
+        let result = resolve_binary_path("definitely_nonexistent_binary_12345");
+        assert!(result.is_none());
+    }
 }
 
