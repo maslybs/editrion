@@ -29,39 +29,36 @@ async fn codex_exec(prompt: String, cwd: Option<String>) -> Result<String, Strin
 }
 
 #[tauri::command]
-async fn codex_exec_stream(state: State<'_, AppState>, window: tauri::Window, prompt: String, cwd: Option<String>, run_id: String) -> Result<(), String> {
+async fn codex_exec_stream(state: State<'_, AppState>, window: tauri::Window, prompt: String, cwd: Option<String>, run_id: String, model: Option<String>, config: Option<HashMap<String, String>>) -> Result<(), String> {
     let procs_map = state.procs.clone();
-    tauri::async_runtime::spawn_blocking(move || run_codex_exec_stream(procs_map, window, prompt, cwd, run_id))
+    tauri::async_runtime::spawn_blocking(move || run_codex_exec_stream(procs_map, window, prompt, cwd, run_id, model, config))
         .await
         .map_err(|e| format!("Failed to join codex stream worker: {}", e))?
 }
 
-fn run_codex_exec_stream(procs_map: Arc<Mutex<HashMap<String, Arc<Mutex<Child>>>>>, window: tauri::Window, prompt: String, cwd: Option<String>, run_id: String) -> Result<(), String> {
+fn run_codex_exec_stream(procs_map: Arc<Mutex<HashMap<String, Arc<Mutex<Child>>>>>, window: tauri::Window, prompt: String, cwd: Option<String>, run_id: String, model: Option<String>, config: Option<HashMap<String, String>>) -> Result<(), String> {
     let spawn = || -> std::io::Result<Child> {
         let use_pty = std::env::var("CODEX_STREAM_PTY").map(|v| v != "0").unwrap_or(true);
         // Prefer non-TUI streaming by default to reduce noise in editor
         let prefer_tui = std::env::var("CODEX_STREAM_TUI").map(|v| v != "0").unwrap_or(false);
+        let mut pre_flags: Vec<String> = Vec::new();
+        if let Some(m) = model.as_ref() { pre_flags.push("--model".into()); pre_flags.push(m.clone()); }
+        if let Some(cfg) = config.as_ref() { for (k, v) in cfg.iter() { pre_flags.push("-c".into()); pre_flags.push(format!("{}={}", k, v)); } }
         #[cfg(not(target_os = "windows"))]
         if use_pty {
             // Try to wrap with 'script' to allocate a PTY for faster flushes
             if let Some(codex_bin) = resolve_codex_path() {
                 let mut cmd = Command::new("/usr/bin/script");
                 cmd.arg("-q").arg("/dev/null");
-                if prefer_tui {
-                    cmd.arg(&codex_bin).arg(&prompt);
-                } else {
-                    cmd.arg(&codex_bin).arg("exec").arg("--skip-git-repo-check").arg(&prompt);
-                }
+                if prefer_tui { cmd.arg(&codex_bin); for a in &pre_flags { cmd.arg(a); } cmd.arg(&prompt); }
+                else { cmd.arg(&codex_bin).arg("exec").arg("--skip-git-repo-check"); for a in &pre_flags { cmd.arg(a); } cmd.arg(&prompt); }
                 if let Some(ref dir) = cwd { if Path::new(dir).is_dir() { let _ = cmd.current_dir(dir); } }
                 cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
                 if let Ok(child) = cmd.spawn() { return Ok(child); }
             }
             // PTY via zsh login shell
-            let cmdline = if prefer_tui {
-                format!("codex {}", shell_quote(&prompt))
-            } else {
-                format!("codex exec --skip-git-repo-check {}", shell_quote(&prompt))
-            };
+            let flags = if pre_flags.is_empty() { String::new() } else { format!("{} ", pre_flags.join(" ")) };
+            let cmdline = if prefer_tui { format!("codex {}{}", flags, shell_quote(&prompt)) } else { format!("codex exec --skip-git-repo-check {}{}", flags, shell_quote(&prompt)) };
             let mut cmd = Command::new("/usr/bin/script");
             cmd.arg("-q").arg("/dev/null").arg("/bin/zsh").arg("-lc").arg(&cmdline);
             if let Some(ref dir) = cwd { if Path::new(dir).is_dir() { let _ = cmd.current_dir(dir); } }
@@ -71,22 +68,16 @@ fn run_codex_exec_stream(procs_map: Arc<Mutex<HashMap<String, Arc<Mutex<Child>>>
         // Fallback: direct spawn
         if let Some(codex_bin) = resolve_codex_path() {
             let mut cmd = Command::new(&codex_bin);
-            if prefer_tui {
-                cmd.arg(&prompt);
-            } else {
-                cmd.arg("exec").arg("--skip-git-repo-check").arg(&prompt);
-            }
+            if prefer_tui { for a in &pre_flags { cmd.arg(a); } cmd.arg(&prompt); }
+            else { cmd.arg("exec").arg("--skip-git-repo-check"); for a in &pre_flags { cmd.arg(a); } cmd.arg(&prompt); }
             if let Some(ref dir) = cwd { if Path::new(dir).is_dir() { let _ = cmd.current_dir(dir); } }
             cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
             return cmd.spawn();
         }
         // Fallback via login shell PATH
-        let cmdline = if prefer_tui {
-            format!("codex {}", shell_quote(&prompt))
-        } else {
-            format!("codex exec --skip-git-repo-check {}", shell_quote(&prompt))
-        };
-        let mut cmd = Command::new("/bin/zsh");
+        let flags = if pre_flags.is_empty() { String::new() } else { format!("{} ", pre_flags.join(" ")) };
+        let cmdline = if prefer_tui { format!("codex {}{}", flags, shell_quote(&prompt)) } else { format!("codex exec --skip-git-repo-check {}{}", flags, shell_quote(&prompt)) };
+    let mut cmd = Command::new("/bin/zsh");
         cmd.arg("-lc").arg(&cmdline);
         if let Some(ref dir) = cwd { if Path::new(dir).is_dir() { let _ = cmd.current_dir(dir); } }
         cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
@@ -175,7 +166,7 @@ fn run_codex_exec_stream(procs_map: Arc<Mutex<HashMap<String, Arc<Mutex<Child>>>
                         let line = acc[..pos].to_string();
                         // remove the processed part including the newline
                         acc.drain(..=pos);
-                        let ls = line.trim_start();
+                        let _ls = line.trim_start();
                         // Detect assistant phase marker; for TUI we also allow first non-meta to start streaming
                         if !started_content {
                             if line.contains("] codex") {
@@ -288,6 +279,46 @@ fn run_codex_exec(prompt: String, cwd: Option<String>) -> Result<String, String>
 
     // Fallback: run through login shell to load NVM/Brew PATH
     let cmdline = format!("codex exec --skip-git-repo-check {}", shell_quote(&prompt));
+    match spawn_and_collect(|| {
+        let mut cmd = Command::new("/bin/zsh");
+        cmd.arg("-lc").arg(&cmdline);
+        if let Some(ref dir) = cwd { if Path::new(dir).is_dir() { let _ = cmd.current_dir(dir); } }
+        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+        cmd.spawn()
+    }) {
+        Ok(s) => Ok(clean_codex_output(&s)),
+        Err(e) => {
+            let path_env = std::env::var("PATH").unwrap_or_default();
+            Err(format!(
+                "Failed to start codex via zsh. Error: {}\nPATH: {}\nTry setting CODEX_BIN to absolute path of codex, or run 'codex' once in a terminal to sign in.",
+                e, path_env
+            ))
+        }
+    }
+}
+
+#[tauri::command]
+async fn codex_exec_with_opts(prompt: String, cwd: Option<String>, model: Option<String>, config: Option<HashMap<String, String>>) -> Result<String, String> {
+    let mut pre_flags: Vec<String> = Vec::new();
+    if let Some(m) = model.as_ref() { pre_flags.push("--model".into()); pre_flags.push(m.clone()); }
+    if let Some(cfg) = config.as_ref() { for (k, v) in cfg.iter() { pre_flags.push("-c".into()); pre_flags.push(format!("{}={}", k, v)); } }
+    // Try running via resolved absolute path first
+    if let Some(codex_bin) = resolve_codex_path() {
+        match spawn_and_collect(|| {
+            let mut cmd = Command::new(&codex_bin);
+            cmd.arg("exec").arg("--skip-git-repo-check"); for a in &pre_flags { cmd.arg(a); } cmd.arg(&prompt);
+            if let Some(ref dir) = cwd { if Path::new(dir).is_dir() { let _ = cmd.current_dir(dir); } }
+            cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+            cmd.spawn()
+        }) {
+            Ok(s) => return Ok(clean_codex_output(&s)),
+            Err(e) => {
+                eprintln!("direct codex spawn failed: {}", e);
+            }
+        }
+    }
+    let flags = if pre_flags.is_empty() { String::new() } else { format!("{} ", pre_flags.join(" ")) };
+    let cmdline = format!("codex exec --skip-git-repo-check {}{}", flags, shell_quote(&prompt));
     match spawn_and_collect(|| {
         let mut cmd = Command::new("/bin/zsh");
         cmd.arg("-lc").arg(&cmdline);
@@ -670,6 +701,67 @@ fn clear_dir(path: String) -> Result<(), String> {
     Ok(())
 }
 
+// ----- Lightweight config helpers (config.toml in CODEX_HOME) -----
+#[tauri::command]
+fn codex_config_path() -> Result<String, String> {
+    let home = std::env::var("CODEX_HOME").ok().map(std::path::PathBuf::from).or_else(|| {
+        std::env::var("HOME").ok().map(|h| std::path::PathBuf::from(h).join(".codex"))
+    }).ok_or_else(|| "HOME not set".to_string())?;
+    std::fs::create_dir_all(&home).map_err(|e| e.to_string())?;
+    let cfg = home.join("config.toml");
+    Ok(cfg.to_string_lossy().to_string())
+}
+
+fn value_is_literal(val: &str) -> bool {
+    let v = val.trim();
+    if v.eq_ignore_ascii_case("true") || v.eq_ignore_ascii_case("false") { return true; }
+    if v.parse::<i64>().is_ok() || v.parse::<f64>().is_ok() { return true; }
+    if (v.starts_with('[') && v.ends_with(']')) || (v.starts_with('{') && v.ends_with('}')) { return true; }
+    if (v.starts_with('"') && v.ends_with('"')) || (v.starts_with('\'') && v.ends_with('\'')) { return true; }
+    false
+}
+
+fn update_toml_key(original: &str, key: &str, value: &str) -> String {
+    let mut out = String::with_capacity(original.len() + key.len() + value.len() + 8);
+    let mut replaced = false;
+    for line in original.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with(key) {
+            let rest = &trimmed[key.len()..];
+            let mut idx = 0usize;
+            let rest_bytes = rest.as_bytes();
+            while idx < rest_bytes.len() && rest_bytes[idx].is_ascii_whitespace() { idx += 1; }
+            if idx < rest_bytes.len() && rest_bytes[idx] == b'=' {
+                out.push_str(key);
+                out.push_str(" = ");
+                if value_is_literal(value) { out.push_str(value.trim()); } else { out.push('"'); out.push_str(value); out.push('"'); }
+                out.push('\n');
+                replaced = true;
+                continue;
+            }
+        }
+        out.push_str(line);
+        out.push('\n');
+    }
+    if !replaced {
+        let mut pref = String::new();
+        pref.push_str(key);
+        pref.push_str(" = ");
+        if value_is_literal(value) { pref.push_str(value.trim()); } else { pref.push('"'); pref.push_str(value); pref.push('"'); }
+        pref.push('\n');
+        pref.push_str(original);
+        pref
+    } else { out }
+}
+
+#[tauri::command]
+fn codex_config_set(key: String, value: String) -> Result<(), String> {
+    let path = codex_config_path()?;
+    let existing = std::fs::read_to_string(&path).unwrap_or_else(|_| String::new());
+    let updated = update_toml_key(&existing, &key, &value);
+    std::fs::write(&path, updated).map_err(|e| e.to_string())
+}
+
 fn main() {
     let app = tauri::Builder::default()
         .manage(AppState { procs: Arc::new(Mutex::new(HashMap::new())) })
@@ -812,7 +904,7 @@ fn main() {
                 let _ = window.emit("menu-event", id);
             }
         })
-        .invoke_handler(tauri::generate_handler![read_file, write_file, read_dir, create_new_file, menu_action, quit_app, rebuild_menu, drafts_dir, remove_file, clear_dir, codex_exec, codex_exec_stream, codex_login_stream, codex_cancel])
+        .invoke_handler(tauri::generate_handler![read_file, write_file, read_dir, create_new_file, menu_action, quit_app, rebuild_menu, drafts_dir, remove_file, clear_dir, codex_exec, codex_exec_stream, codex_login_stream, codex_cancel, codex_config_path, codex_config_set, codex_exec_with_opts])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 

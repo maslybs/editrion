@@ -72,6 +72,7 @@ class Editrion {
   private customThemeVars: string[] = [];
   private draftsDir: string | null = null;
   private draftSaveTimers: Record<string, number> = {};
+  private aiOverrides: { model?: string; effort?: 'minimal'|'low'|'medium'|'high'; summary?: 'auto'|'concise'|'detailed'|'none'; verbosity?: 'low'|'medium'|'high' } = {};
   private confirmOverlay?: HTMLElement;
   private confirmMessageEl?: HTMLElement;
   private confirmResolve?: (v: 'save' | 'discard' | 'cancel') => void;
@@ -107,6 +108,11 @@ class Editrion {
     registerDictionaries('de', de as any);
     initI18n();
     applyTranslations();
+    // Load ephemeral AI overrides
+    try {
+      const raw = localStorage.getItem('editrion.aiOverrides');
+      if (raw) this.aiOverrides = JSON.parse(raw);
+    } catch {}
 
     // Build native menu with current locale labels
     this.updateNativeMenuLabels();
@@ -588,8 +594,13 @@ class Editrion {
         const sel = editor.getSelection();
         const model = editor.getModel();
         const selected = sel && model ? model.getValueInRange(sel) : '';
-        const instruction = await this.showCodexInstructionModal();
-        if (!instruction) return;
+        const form = await this.showCodexInstructionModal();
+        if (!form) return;
+        const instruction = form.instruction;
+        if (form.model) this.setAiOverrideModel(form.model as any);
+        if (form.effort) this.setAiOverrideEffort(form.effort as any);
+        if (form.summary) this.setAiOverrideSummary(form.summary as any);
+        if (form.verbosity) this.setAiOverrideVerbosity(form.verbosity as any);
         let cwd: string | undefined;
         if (tab.path) {
           const parts = tab.path.split(/[/\\]/); parts.pop(); cwd = parts.join('/');
@@ -734,10 +745,13 @@ class Editrion {
           try { btnCancel.disabled = true; canceled = true; await invoke('codex_cancel', { runId }); } catch {}
         });
 
+        // Build ephemeral per-call overrides
+        const ephemModel = this.aiOverrides?.model;
+        const ephemConfig = this.buildAiConfigOverrides();
         // Prefer streaming; fall back to non-streaming if command unavailable
-        invoke('codex_exec_stream', { prompt, cwd, runId }).catch(async () => {
+        invoke('codex_exec_stream', { prompt, cwd, runId, model: ephemModel, config: ephemConfig }).catch(async () => {
           // Old path
-          const output = await invoke<string>('codex_exec', { prompt, cwd }).catch(e => { throw e; });
+          const output = await invoke<string>('codex_exec_with_opts', { prompt, cwd, model: ephemModel, config: ephemConfig }).catch(e => { throw e; });
           unsubs.forEach(fn => fn());
           if (model && sel) {
             // Replace selection with final output (legacy path)
@@ -758,7 +772,7 @@ class Editrion {
     tab.editor = editor;
   }
 
-  private showCodexInstructionModal(): Promise<string | null> {
+  private showCodexInstructionModal(): Promise<{ instruction: string; model?: string; effort?: 'minimal'|'low'|'medium'|'high'; summary?: 'auto'|'concise'|'detailed'|'none'; verbosity?: 'low'|'medium'|'high' } | null> {
     return new Promise((resolve) => {
       const overlay = document.createElement('div');
       overlay.style.position = 'fixed';
@@ -801,6 +815,57 @@ class Editrion {
 
       body.appendChild(instr);
 
+      // Options row
+      const row = document.createElement('div');
+      row.style.display = 'grid';
+      row.style.gridTemplateColumns = '1fr 1fr';
+      row.style.gap = '8px 12px';
+      row.style.marginTop = '10px';
+
+      const makeSelect = (labelText: string, opts: Array<{label: string, value: string}>, current?: string) => {
+        const wrap = document.createElement('label');
+        wrap.style.display = 'flex';
+        wrap.style.flexDirection = 'column';
+        wrap.style.fontSize = '12px';
+        wrap.style.opacity = '0.9';
+        const lab = document.createElement('span'); lab.textContent = labelText; lab.style.marginBottom = '4px';
+        const sel = document.createElement('select');
+        sel.style.padding = '6px 8px'; sel.style.borderRadius = '6px'; sel.style.background = 'var(--editor-bg, #252526)'; sel.style.color = 'inherit'; sel.style.border = '1px solid rgba(255,255,255,0.1)';
+        const empty = document.createElement('option'); empty.value=''; empty.text='(default)'; sel.appendChild(empty);
+        for (const o of opts) { const op = document.createElement('option'); op.value = o.value; op.text = o.label; sel.appendChild(op); }
+        if (current) sel.value = current;
+        wrap.appendChild(lab); wrap.appendChild(sel);
+        return { wrap, sel };
+      };
+
+      const { wrap: modelWrap, sel: modelSel } = makeSelect('Model', [
+        { label: 'o3', value: 'o3' },
+        { label: 'gpt-5', value: 'gpt-5' },
+      ], this.aiOverrides.model);
+
+      const { wrap: effWrap, sel: effSel } = makeSelect('Reasoning Effort', [
+        { label: 'minimal', value: 'minimal' },
+        { label: 'low', value: 'low' },
+        { label: 'medium', value: 'medium' },
+        { label: 'high', value: 'high' },
+      ], this.aiOverrides.effort);
+
+      const { wrap: sumWrap, sel: sumSel } = makeSelect('Reasoning Summary', [
+        { label: 'auto', value: 'auto' },
+        { label: 'concise', value: 'concise' },
+        { label: 'detailed', value: 'detailed' },
+        { label: 'none', value: 'none' },
+      ], this.aiOverrides.summary);
+
+      const { wrap: verbWrap, sel: verbSel } = makeSelect('Verbosity', [
+        { label: 'low', value: 'low' },
+        { label: 'medium', value: 'medium' },
+        { label: 'high', value: 'high' },
+      ], this.aiOverrides.verbosity);
+
+      row.append(modelWrap, effWrap, sumWrap, verbWrap);
+      body.appendChild(row);
+
       const actions = document.createElement('div');
       actions.style.display = 'flex';
       actions.style.alignItems = 'center';
@@ -830,7 +895,7 @@ class Editrion {
       btnRun.style.background = '#3a86ff';
       btnRun.style.color = '#fff';
 
-      const cleanup = (value: string | null) => {
+      const cleanup = (value: { instruction: string; model?: string; effort?: any; summary?: any; verbosity?: any } | null) => {
         overlay.remove();
         resolve(value);
       };
@@ -839,7 +904,13 @@ class Editrion {
       btnRun.addEventListener('click', () => {
         btnRun.disabled = true; btnCancel.disabled = true; instr.disabled = true;
         status.textContent = t('status.runningCodex') || 'Running AI…';
-        cleanup(instr.value || 'Translate to Ukrainian');
+        cleanup({
+          instruction: instr.value || 'Translate to Ukrainian',
+          model: modelSel.value || undefined,
+          effort: (effSel.value || undefined) as any,
+          summary: (sumSel.value || undefined) as any,
+          verbosity: (verbSel.value || undefined) as any,
+        });
       });
       overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(null); });
       instr.addEventListener('keydown', (e) => {
@@ -1639,6 +1710,49 @@ class Editrion {
           applyTranslations();
           this.updateNativeMenuLabels();
           break;
+        // AI: ephemeral per-call overrides
+        case 'ai_open_config':
+          this.openAiConfig();
+          break;
+        case 'ai_model_o3':
+          this.setAiOverrideModel('o3');
+          break;
+        case 'ai_model_gpt5':
+          this.setAiOverrideModel('gpt-5');
+          break;
+        case 'ai_reasoning_effort_minimal':
+          this.setAiOverrideEffort('minimal');
+          break;
+        case 'ai_reasoning_effort_low':
+          this.setAiOverrideEffort('low');
+          break;
+        case 'ai_reasoning_effort_medium':
+          this.setAiOverrideEffort('medium');
+          break;
+        case 'ai_reasoning_effort_high':
+          this.setAiOverrideEffort('high');
+          break;
+        case 'ai_reasoning_summary_auto':
+          this.setAiOverrideSummary('auto');
+          break;
+        case 'ai_reasoning_summary_concise':
+          this.setAiOverrideSummary('concise');
+          break;
+        case 'ai_reasoning_summary_detailed':
+          this.setAiOverrideSummary('detailed');
+          break;
+        case 'ai_reasoning_summary_none':
+          this.setAiOverrideSummary('none');
+          break;
+        case 'ai_model_verbosity_low':
+          this.setAiOverrideVerbosity('low');
+          break;
+        case 'ai_model_verbosity_medium':
+          this.setAiOverrideVerbosity('medium');
+          break;
+        case 'ai_model_verbosity_high':
+          this.setAiOverrideVerbosity('high');
+          break;
         // codex_exec menu removed
       }
     });
@@ -1970,6 +2084,34 @@ class Editrion {
     this.confirmMessageEl.textContent = t('confirm.unsavedMulti', { count });
     this.confirmOverlay.classList.add('show');
     return new Promise(resolve => { this.confirmResolve = resolve; });
+  }
+
+  // ---------- AI config helpers ----------
+  private async openAiConfig() {
+    try {
+      const path = await invoke<string>('codex_config_path');
+      try { await invoke('read_file', { path }); } catch { await invoke('write_file', { path, content: '' }); }
+      const name = this.basename(path);
+      await this.openFileByPath(path, name);
+    } catch (e) {
+      console.error('Failed to open AI config:', e);
+      alert('Failed to open AI config.');
+    }
+  }
+
+  private saveAiOverrides() {
+    try { localStorage.setItem('editrion.aiOverrides', JSON.stringify(this.aiOverrides)); } catch {}
+  }
+  private setAiOverrideModel(model: string) { this.aiOverrides.model = model; this.saveAiOverrides(); }
+  private setAiOverrideEffort(effort: 'minimal'|'low'|'medium'|'high') { this.aiOverrides.effort = effort; this.saveAiOverrides(); }
+  private setAiOverrideSummary(summary: 'auto'|'concise'|'detailed'|'none') { this.aiOverrides.summary = summary; this.saveAiOverrides(); }
+  private setAiOverrideVerbosity(verbosity: 'low'|'medium'|'high') { this.aiOverrides.verbosity = verbosity; this.saveAiOverrides(); }
+  private buildAiConfigOverrides(): Record<string,string> {
+    const cfg: Record<string,string> = {};
+    if (this.aiOverrides.effort) cfg['model_reasoning_effort'] = this.aiOverrides.effort;
+    if (this.aiOverrides.summary) cfg['model_reasoning_summary'] = this.aiOverrides.summary;
+    if (this.aiOverrides.verbosity) cfg['model_verbosity'] = this.aiOverrides.verbosity;
+    return cfg;
   }
 }
 
