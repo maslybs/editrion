@@ -73,6 +73,7 @@ class Editrion {
   private draftsDir: string | null = null;
   private draftSaveTimers: Record<string, number> = {};
   private aiOverrides: { model?: string; effort?: 'minimal'|'low'|'medium'|'high'; summary?: 'auto'|'concise'|'detailed'|'none'; verbosity?: 'low'|'medium'|'high' } = {};
+  private aiTemplates: Array<{ id: string; name: string; instruction: string; effort?: 'minimal'|'low'|'medium'|'high' }>= [];
   private confirmOverlay?: HTMLElement;
   private confirmMessageEl?: HTMLElement;
   private confirmResolve?: (v: 'save' | 'discard' | 'cancel') => void;
@@ -112,6 +113,11 @@ class Editrion {
     try {
       const raw = localStorage.getItem('editrion.aiOverrides');
       if (raw) this.aiOverrides = JSON.parse(raw);
+    } catch {}
+    // Load AI templates
+    try {
+      const rawTpl = localStorage.getItem('editrion.aiTemplates');
+      if (rawTpl) this.aiTemplates = JSON.parse(rawTpl);
     } catch {}
 
     // Build native menu with current locale labels
@@ -564,6 +570,8 @@ class Editrion {
         seedSearchStringFromSelection: 'always'
       }
     });
+    // Register template actions on this editor
+    this.registerTemplateActions(editor, tab);
     
     tab.originalContent = tab.originalContent ?? content;
     editor.onDidChangeModelContent(() => {
@@ -591,16 +599,14 @@ class Editrion {
       contextMenuGroupId: 'navigation',
       contextMenuOrder: 1.5,
       run: async () => {
+        try {
         const sel = editor.getSelection();
         const model = editor.getModel();
         const selected = sel && model ? model.getValueInRange(sel) : '';
         const form = await this.showCodexInstructionModal();
         if (!form) return;
         const instruction = form.instruction;
-        if (form.model) this.setAiOverrideModel(form.model as any);
         if (form.effort) this.setAiOverrideEffort(form.effort as any);
-        if (form.summary) this.setAiOverrideSummary(form.summary as any);
-        if (form.verbosity) this.setAiOverrideVerbosity(form.verbosity as any);
         let cwd: string | undefined;
         if (tab.path) {
           const parts = tab.path.split(/[/\\]/); parts.pop(); cwd = parts.join('/');
@@ -746,7 +752,8 @@ class Editrion {
         });
 
         // Build ephemeral per-call overrides
-        const ephemModel = this.aiOverrides?.model;
+        // Force gpt-5 for now
+        const ephemModel = 'gpt-5';
         const ephemConfig = this.buildAiConfigOverrides();
         // Prefer streaming; fall back to non-streaming if command unavailable
         invoke('codex_exec_stream', { prompt, cwd, runId, model: ephemModel, config: ephemConfig }).catch(async () => {
@@ -761,6 +768,10 @@ class Editrion {
           }
           streamBox.remove();
         });
+        } catch (e) {
+          console.error('AI action failed:', e);
+          alert('Failed to open AI modal or run. See console for details.');
+        }
       }
     });
     
@@ -772,7 +783,73 @@ class Editrion {
     tab.editor = editor;
   }
 
-  private showCodexInstructionModal(): Promise<{ instruction: string; model?: string; effort?: 'minimal'|'low'|'medium'|'high'; summary?: 'auto'|'concise'|'detailed'|'none'; verbosity?: 'low'|'medium'|'high' } | null> {
+  private registerTemplateActions(editor: monaco.editor.IStandaloneCodeEditor, tab: Tab) {
+    const storeKey = '_aiTemplateActions';
+    const store: Set<string> = (editor as any)[storeKey] || new Set<string>();
+    (editor as any)[storeKey] = store;
+    for (const tpl of this.aiTemplates) {
+      const id = `codex.template.${tpl.id}`;
+      if (store.has(id)) continue;
+      editor.addAction({
+        id,
+        label: `AI: ${tpl.name}`,
+        contextMenuGroupId: 'navigation',
+        contextMenuOrder: 1.6,
+        run: async () => {
+          await this.performAiRun(editor, tab, tpl.instruction, tpl.effort);
+        }
+      });
+      store.add(id);
+    }
+  }
+
+  // private saveAiTemplate(tpl: { id: string; name: string; instruction: string; effort?: 'minimal'|'low'|'medium'|'high' }) {
+  //   this.aiTemplates.push(tpl);
+  //   try { localStorage.setItem('editrion.aiTemplates', JSON.stringify(this.aiTemplates)); } catch {}
+  //   for (const t of this.tabs) { if (t.editor) this.registerTemplateActions(t.editor, t); }
+  // }
+
+  private async performAiRun(editor: monaco.editor.IStandaloneCodeEditor, tab: Tab, instruction: string, effort?: 'minimal'|'low'|'medium'|'high') {
+    const sel = editor.getSelection();
+    const model = editor.getModel();
+    const selected = sel && model ? model.getValueInRange(sel) : '';
+    let cwd: string | undefined;
+    if (tab.path) { const parts = tab.path.split(/[/\\]/); parts.pop(); cwd = parts.join('/'); }
+    else if (this.projectRoots.length > 0) { cwd = this.projectRoots[0]; }
+    const prompt = `${instruction}\n\n--- INPUT START ---\n${selected}\n--- INPUT END ---\n\nReturn only the transformed text.`;
+    const streamBox = document.createElement('div');
+    streamBox.style.position = 'fixed'; streamBox.style.bottom = '10px'; streamBox.style.right = '10px';
+    streamBox.style.display = 'flex'; streamBox.style.alignItems = 'center'; streamBox.style.gap = '8px';
+    streamBox.style.padding = '8px 10px'; streamBox.style.background = 'rgba(0,0,0,0.75)'; streamBox.style.color = '#fff';
+    streamBox.style.borderRadius = '8px'; streamBox.style.font = '12px/1.4 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto'; streamBox.style.zIndex = '9999';
+    const spinner = document.createElement('div'); spinner.style.width = '12px'; spinner.style.height = '12px'; spinner.style.border = '2px solid rgba(255,255,255,0.35)'; spinner.style.borderTopColor = '#fff'; spinner.style.borderRadius = '50%'; spinner.style.animation = 'editrion-spin 0.8s linear infinite';
+    const label = document.createElement('span'); label.textContent = t('status.runningCodex') || 'Running AI…';
+    const btnCancel = document.createElement('button'); btnCancel.textContent = t('button.cancel') || 'Cancel'; btnCancel.style.marginLeft = '6px'; btnCancel.style.padding = '4px 8px'; btnCancel.style.fontSize = '12px'; btnCancel.style.borderRadius = '6px'; btnCancel.style.border = '1px solid rgba(255,255,255,0.25)'; btnCancel.style.background = 'transparent'; btnCancel.style.color = '#fff'; btnCancel.style.cursor = 'pointer';
+    streamBox.appendChild(spinner); streamBox.appendChild(label); streamBox.appendChild(btnCancel); document.body.appendChild(streamBox);
+    const styleEl = document.createElement('style'); styleEl.textContent = '@keyframes editrion-spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}'; document.head.appendChild(styleEl);
+    const runId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    let canceled = false; let outBuf = '';
+    const hasSelection = !!(sel && model && !sel.isEmpty() && selected.length > 0);
+    let insertOffset = 0; if (model) { const startPos = sel ? sel.getStartPosition() : model.getPositionAt(model.getFullModelRange().getStartPosition().lineNumber); insertOffset = model.getOffsetAt(startPos); }
+    function chunkForInsert(s: string, size = 64): string[] { const chunks: string[] = []; let i = 0; while (i < s.length) { const upto = Math.min(i + size, s.length); chunks.push(s.slice(i, upto)); i = upto; } return chunks; }
+    const unsubs: Array<() => void> = []; const addUnsub = (fn: () => void) => unsubs.push(fn);
+    const onStream = await listen<any>('codex-stream', (ev) => {
+      const p = ev.payload as { runId?: string; channel?: 'stdout'|'stderr'; data?: string }; if (!p || p.runId !== runId) return; if (p.channel !== 'stdout') return; let text = (p.data || ''); if (!text) return; text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n'); outBuf += text; if (!model) return;
+      const segments = chunkForInsert(text); const edits: monaco.editor.IIdentifiedSingleEditOperation[] = []; for (const seg of segments) { const pos = model.getPositionAt(insertOffset); edits.push({ range: new monaco.Range(pos.lineNumber, pos.column, pos.lineNumber, pos.column), text: seg, forceMoveMarkers: true }); insertOffset += seg.length; }
+      if (edits.length) editor.executeEdits('codex', edits);
+    }); addUnsub(() => { onStream(); });
+    const onDone = await listen<any>('codex-complete', (ev) => {
+      const p = ev.payload as { runId?: string; ok?: boolean; output?: string; error?: string }; if (!p || p.runId !== runId) return; unsubs.forEach(fn => fn()); if (p.ok) { const result = (p.output ?? '').trim(); if (!model) return; const hasStreamed = outBuf.trim().length > 0; const finalText = (hasStreamed ? outBuf : result).replace(/\r\n/g, '\n').replace(/\r/g, '\n'); if (hasSelection && sel) { if (!hasStreamed) { editor.executeEdits('codex', [{ range: sel, text: finalText, forceMoveMarkers: true }]); } } else if (!hasStreamed) { const segments = chunkForInsert(finalText); const edits: monaco.editor.IIdentifiedSingleEditOperation[] = []; for (const seg of segments) { const pos = model.getPositionAt(insertOffset); edits.push({ range: new monaco.Range(pos.lineNumber, pos.column, pos.lineNumber, pos.column), text: seg, forceMoveMarkers: true }); insertOffset += seg.length; } if (edits.length) editor.executeEdits('codex', edits); } editor.focus(); } else { console.warn('Codex failed:', p.error || 'unknown error'); } if (p.ok || canceled) { streamBox.remove(); }
+    }); addUnsub(() => { onDone(); });
+    btnCancel.addEventListener('click', async () => { try { btnCancel.disabled = true; canceled = true; await invoke('codex_cancel', { runId }); } catch {} });
+    const ephemModel = 'gpt-5'; const ephemConfig: Record<string,string> = {}; if (effort) ephemConfig['model_reasoning_effort'] = effort;
+    invoke('codex_exec_stream', { prompt, cwd, runId, model: ephemModel, config: ephemConfig }).catch(async () => {
+      const output = await invoke<string>('codex_exec_with_opts', { prompt, cwd, model: ephemModel, config: ephemConfig }).catch(e => { throw e; }); unsubs.forEach(fn => fn()); if (model && sel) { const normalized = output.replace(/\r\n/g, '\n').replace(/\r/g, '\n'); editor.executeEdits('codex', [{ range: sel, text: normalized, forceMoveMarkers: true }]); editor.focus(); }
+      streamBox.remove();
+    });
+  }
+
+  private showCodexInstructionModal(): Promise<{ instruction: string; effort?: 'minimal'|'low'|'medium'|'high' } | null> {
     return new Promise((resolve) => {
       const overlay = document.createElement('div');
       overlay.style.position = 'fixed';
@@ -815,56 +892,33 @@ class Editrion {
 
       body.appendChild(instr);
 
-      // Options row
-      const row = document.createElement('div');
-      row.style.display = 'grid';
-      row.style.gridTemplateColumns = '1fr 1fr';
-      row.style.gap = '8px 12px';
-      row.style.marginTop = '10px';
-
-      const makeSelect = (labelText: string, opts: Array<{label: string, value: string}>, current?: string) => {
-        const wrap = document.createElement('label');
-        wrap.style.display = 'flex';
-        wrap.style.flexDirection = 'column';
-        wrap.style.fontSize = '12px';
-        wrap.style.opacity = '0.9';
-        const lab = document.createElement('span'); lab.textContent = labelText; lab.style.marginBottom = '4px';
-        const sel = document.createElement('select');
-        sel.style.padding = '6px 8px'; sel.style.borderRadius = '6px'; sel.style.background = 'var(--editor-bg, #252526)'; sel.style.color = 'inherit'; sel.style.border = '1px solid rgba(255,255,255,0.1)';
-        const empty = document.createElement('option'); empty.value=''; empty.text='(default)'; sel.appendChild(empty);
-        for (const o of opts) { const op = document.createElement('option'); op.value = o.value; op.text = o.label; sel.appendChild(op); }
-        if (current) sel.value = current;
-        wrap.appendChild(lab); wrap.appendChild(sel);
-        return { wrap, sel };
-      };
-
-      const { wrap: modelWrap, sel: modelSel } = makeSelect('Model', [
-        { label: 'o3', value: 'o3' },
-        { label: 'gpt-5', value: 'gpt-5' },
-      ], this.aiOverrides.model);
-
-      const { wrap: effWrap, sel: effSel } = makeSelect('Reasoning Effort', [
-        { label: 'minimal', value: 'minimal' },
-        { label: 'low', value: 'low' },
-        { label: 'medium', value: 'medium' },
-        { label: 'high', value: 'high' },
-      ], this.aiOverrides.effort);
-
-      const { wrap: sumWrap, sel: sumSel } = makeSelect('Reasoning Summary', [
-        { label: 'auto', value: 'auto' },
-        { label: 'concise', value: 'concise' },
-        { label: 'detailed', value: 'detailed' },
-        { label: 'none', value: 'none' },
-      ], this.aiOverrides.summary);
-
-      const { wrap: verbWrap, sel: verbSel } = makeSelect('Verbosity', [
-        { label: 'low', value: 'low' },
-        { label: 'medium', value: 'medium' },
-        { label: 'high', value: 'high' },
-      ], this.aiOverrides.verbosity);
-
-      row.append(modelWrap, effWrap, sumWrap, verbWrap);
-      body.appendChild(row);
+      // Reasoning Effort radios
+      const effWrap = document.createElement('div');
+      effWrap.style.marginTop = '10px';
+      const effLabel = document.createElement('div');
+      effLabel.textContent = t('ai.modal.reasoningEffort') || 'Reasoning Effort';
+      effLabel.style.fontSize = '12px';
+      effLabel.style.opacity = '0.9';
+      effLabel.style.marginBottom = '6px';
+      const effRow = document.createElement('div');
+      effRow.style.display = 'flex';
+      effRow.style.gap = '12px';
+      const efforts: Array<'minimal'|'low'|'medium'|'high'> = ['minimal','low','medium','high'];
+      let effValue: 'minimal'|'low'|'medium'|'high'|'' = (this.aiOverrides.effort ?? '');
+      for (const v of efforts) {
+        const lbl = document.createElement('label');
+        lbl.style.display = 'flex'; lbl.style.alignItems = 'center'; lbl.style.gap = '6px';
+        const rb = document.createElement('input'); rb.type = 'radio'; rb.name = 'effort'; rb.value = v;
+        if (effValue === v) rb.checked = true;
+        rb.addEventListener('change', () => { effValue = v; });
+        const span = document.createElement('span');
+        const key = `ai.modal.reasoningEffort.${v}`;
+        span.textContent = t(key) || v;
+        lbl.append(rb, span);
+        effRow.appendChild(lbl);
+      }
+      effWrap.append(effLabel, effRow);
+      body.appendChild(effWrap);
 
       const actions = document.createElement('div');
       actions.style.display = 'flex';
@@ -878,6 +932,8 @@ class Editrion {
       status.style.opacity = '0.85';
       status.style.fontSize = '12px';
       status.style.marginRight = 'auto';
+
+      
 
       const btnCancel = document.createElement('button');
       btnCancel.textContent = t('button.cancel');
@@ -895,7 +951,7 @@ class Editrion {
       btnRun.style.background = '#3a86ff';
       btnRun.style.color = '#fff';
 
-      const cleanup = (value: { instruction: string; model?: string; effort?: any; summary?: any; verbosity?: any } | null) => {
+      const cleanup = (value: { instruction: string; effort?: any } | null) => {
         overlay.remove();
         resolve(value);
       };
@@ -904,13 +960,7 @@ class Editrion {
       btnRun.addEventListener('click', () => {
         btnRun.disabled = true; btnCancel.disabled = true; instr.disabled = true;
         status.textContent = t('status.runningCodex') || 'Running AI…';
-        cleanup({
-          instruction: instr.value || 'Translate to Ukrainian',
-          model: modelSel.value || undefined,
-          effort: (effSel.value || undefined) as any,
-          summary: (sumSel.value || undefined) as any,
-          verbosity: (verbSel.value || undefined) as any,
-        });
+        cleanup({ instruction: instr.value || 'Translate to Ukrainian', effort: effValue || undefined });
       });
       overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(null); });
       instr.addEventListener('keydown', (e) => {
@@ -919,6 +969,7 @@ class Editrion {
       });
 
       actions.appendChild(status);
+      //actions.appendChild(btnSaveTpl);
       actions.appendChild(btnCancel);
       actions.appendChild(btnRun);
       box.appendChild(header);
@@ -2109,8 +2160,6 @@ class Editrion {
   private buildAiConfigOverrides(): Record<string,string> {
     const cfg: Record<string,string> = {};
     if (this.aiOverrides.effort) cfg['model_reasoning_effort'] = this.aiOverrides.effort;
-    if (this.aiOverrides.summary) cfg['model_reasoning_summary'] = this.aiOverrides.summary;
-    if (this.aiOverrides.verbosity) cfg['model_verbosity'] = this.aiOverrides.verbosity;
     return cfg;
   }
 }

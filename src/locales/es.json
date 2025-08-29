@@ -80,5 +80,15 @@
   "button.save": "Guardar",
   "button.dontSave": "No guardar",
   "button.cancel": "Cancelar",
-  "codex.titleTransform": "¿Qué quieres hacer?"
+  "codex.titleTransform": "¿Qué quieres hacer?",
+  "codex.instruction.placeholder": "p. ej., Traducir a",
+  "ai.modal.reasoningEffort": "Esfuerzo de razonamiento",
+  "ai.modal.reasoningEffort.minimal": "Mínimo",
+  "ai.modal.reasoningEffort.low": "Bajo",
+  "ai.modal.reasoningEffort.medium": "Medio",
+  "ai.modal.reasoningEffort.high": "Alto",
+  "ai.modal.saveTemplate": "Guardar como plantilla",
+  "ai.modal.promptTemplateName": "Nombre de la plantilla:"
+  ,
+  "info.templateSaved": "Plantilla guardada"
 }

@@ -90,5 +90,14 @@
   ,
  
   "codex.titleTransform": "Що потрібно зробити?",
-  "codex.instruction.placeholder": "наприклад: Перекласти українською"
+  "codex.instruction.placeholder": "наприклад: Перекласти українською",
+  "ai.modal.reasoningEffort": "Рівень міркування",
+  "ai.modal.reasoningEffort.minimal": "Мінімальний",
+  "ai.modal.reasoningEffort.low": "Низький",
+  "ai.modal.reasoningEffort.medium": "Середній",
+  "ai.modal.reasoningEffort.high": "Високий",
+  "ai.modal.saveTemplate": "Зберегти як шаблон",
+  "ai.modal.promptTemplateName": "Назва шаблону:"
+  ,
+  "info.templateSaved": "Шаблон збережено"
 }

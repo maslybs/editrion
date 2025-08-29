@@ -91,4 +91,14 @@
  
   "codex.titleTransform": "What do you want to do?",
   "codex.instruction.placeholder": "e.g., Translate to"
+  ,
+  "ai.modal.reasoningEffort": "Reasoning Effort",
+  "ai.modal.reasoningEffort.minimal": "Minimal",
+  "ai.modal.reasoningEffort.low": "Low",
+  "ai.modal.reasoningEffort.medium": "Medium",
+  "ai.modal.reasoningEffort.high": "High",
+  "ai.modal.saveTemplate": "Save as Template",
+  "ai.modal.promptTemplateName": "Template name:"
+  ,
+  "info.templateSaved": "Template saved"
 }

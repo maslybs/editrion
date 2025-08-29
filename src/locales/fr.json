@@ -80,5 +80,15 @@
   "button.save": "Enregistrer",
   "button.dontSave": "Ne pas enregistrer",
   "button.cancel": "Annuler",
-  "codex.titleTransform": "Que voulez-vous faire ?"
+  "codex.titleTransform": "Que voulez-vous faire ?",
+  "codex.instruction.placeholder": "par ex., Traduire en",
+  "ai.modal.reasoningEffort": "Effort de raisonnement",
+  "ai.modal.reasoningEffort.minimal": "Minimal",
+  "ai.modal.reasoningEffort.low": "Faible",
+  "ai.modal.reasoningEffort.medium": "Moyen",
+  "ai.modal.reasoningEffort.high": "Élevé",
+  "ai.modal.saveTemplate": "Enregistrer comme modèle",
+  "ai.modal.promptTemplateName": "Nom du modèle :"
+  ,
+  "info.templateSaved": "Modèle enregistré"
 }

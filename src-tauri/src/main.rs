@@ -38,9 +38,10 @@ async fn codex_exec_stream(state: State<'_, AppState>, window: tauri::Window, pr
 
 fn run_codex_exec_stream(procs_map: Arc<Mutex<HashMap<String, Arc<Mutex<Child>>>>>, window: tauri::Window, prompt: String, cwd: Option<String>, run_id: String, model: Option<String>, config: Option<HashMap<String, String>>) -> Result<(), String> {
     let spawn = || -> std::io::Result<Child> {
-        let use_pty = std::env::var("CODEX_STREAM_PTY").map(|v| v != "0").unwrap_or(true);
+        let use_pty_env = std::env::var("CODEX_STREAM_PTY").map(|v| v != "0").unwrap_or(true);
         // Prefer non-TUI streaming by default to reduce noise in editor
         let prefer_tui = std::env::var("CODEX_STREAM_TUI").map(|v| v != "0").unwrap_or(false);
+        let use_pty = use_pty_env && prefer_tui;
         let mut pre_flags: Vec<String> = Vec::new();
         if let Some(m) = model.as_ref() { pre_flags.push("--model".into()); pre_flags.push(m.clone()); }
         if let Some(cfg) = config.as_ref() { for (k, v) in cfg.iter() { pre_flags.push("-c".into()); pre_flags.push(format!("{}={}", k, v)); } }
@@ -65,7 +66,7 @@ fn run_codex_exec_stream(procs_map: Arc<Mutex<HashMap<String, Arc<Mutex<Child>>>
             cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
             if let Ok(child) = cmd.spawn() { return Ok(child); }
         }
-        // Fallback: direct spawn
+        // Direct spawn (non-PTY)
         if let Some(codex_bin) = resolve_codex_path() {
             let mut cmd = Command::new(&codex_bin);
             if prefer_tui { for a in &pre_flags { cmd.arg(a); } cmd.arg(&prompt); }
@@ -104,10 +105,8 @@ fn run_codex_exec_stream(procs_map: Arc<Mutex<HashMap<String, Arc<Mutex<Child>>>
             use std::io::Read;
             let mut tmp = [0u8; 2048];
             let mut acc = String::new();
-            // prefer TUI: start streaming as soon as a non-meta chunk arrives
-            // Keep consistent default: prefer non-TUI unless explicitly enabled
-            let prefer_tui = std::env::var("CODEX_STREAM_TUI").map(|v| v != "0").unwrap_or(false);
-            let mut started_content = false;
+            // Keep consistent default: prefer non-TUI unless explicitly enabled (unused here)
+            let _prefer_tui = std::env::var("CODEX_STREAM_TUI").map(|v| v != "0").unwrap_or(false);
             fn is_meta_line(line: &str) -> bool {
                 let ls = line.trim();
                 if ls.is_empty() { return false; }
@@ -167,25 +166,6 @@ fn run_codex_exec_stream(procs_map: Arc<Mutex<HashMap<String, Arc<Mutex<Child>>>
                         // remove the processed part including the newline
                         acc.drain(..=pos);
                         let _ls = line.trim_start();
-                        // Detect assistant phase marker; for TUI we also allow first non-meta to start streaming
-                        if !started_content {
-                            if line.contains("] codex") {
-                                started_content = true;
-                                if let Some(idx) = line.find("] codex") {
-                                    let mut rest = &line[idx + "] codex".len()..];
-                                    rest = rest.trim_start();
-                                    if !rest.is_empty() { emit(&format!("{}\n", rest)); }
-                                }
-                                continue;
-                            }
-                            if prefer_tui && !is_meta_line(&line) {
-                                started_content = true;
-                                // fall through to emit the line below
-                            } else {
-                                continue;
-                            }
-                        }
-                        // After content started, treat timestamped lines as content by stripping the prefix
                         // Skip meta-only lines like summaries and banners
                         if is_meta_line(&line) || is_noise_line(&line) {
                             continue;
@@ -208,8 +188,8 @@ fn run_codex_exec_stream(procs_map: Arc<Mutex<HashMap<String, Arc<Mutex<Child>>>
                         break;
                     }
                 }
-                // Emit any partial tail without newline only after real content started
-                if started_content && !acc.is_empty() {
+                // Emit any partial tail without newline as soon as it's not meta/noise
+                if !acc.is_empty() {
                     // If partial tail has a timestamp prefix and we haven't seen ']' yet, wait for completion
                     if acc.starts_with('[') && acc.find(']').is_none() {
                         continue;
@@ -225,7 +205,7 @@ fn run_codex_exec_stream(procs_map: Arc<Mutex<HashMap<String, Arc<Mutex<Child>>>
                             rest.to_string()
                         } else { acc.clone() }
                     } else { acc.clone() };
-                    if !tail.is_empty() && !is_noise_line(&tail) { emit(&tail); }
+                    if !tail.is_empty() && !is_noise_line(&tail) && !is_meta_line(&tail) { emit(&tail); }
                     acc.clear();
                 }
             }
@@ -570,7 +550,7 @@ fn strip_ansi(s: &str) -> String {
 }
 
 fn extract_codex_result(s: &str) -> String {
-    let mut capture = false;
+    // Filter out meta/noise lines and keep the rest. Do not require special markers.
     let mut out = String::new();
     fn is_noise_line(line: &str) -> bool {
         let ls = line.trim();
@@ -578,38 +558,15 @@ fn extract_codex_result(s: &str) -> String {
         let lower = ls.to_lowercase();
         if lower.contains("cursor position could not be read") { return true; }
         if lower.contains("could not read cursor position") { return true; }
-        if ls == "^D" { return true; }
+        if ls == "^D" || ls.contains("^D") { return true; }
         if lower.starts_with("error:") && lower.contains("cursor") { return true; }
         false
     }
-    for line in s.lines() {
-        if !capture {
-            if line.contains("] codex") {
-                capture = true;
-                continue; // skip marker line
-            }
-            continue;
-        } else {
-            // Stop on timestamp header or tokens summary
-            let ls = line.trim_start();
-            if is_timestamp_line(line) || ls.starts_with("tokens used:") {
-                break;
-            }
-            if is_noise_line(line) { continue; }
-            out.push_str(line);
-            out.push('\n');
-        }
-    }
-    if out.trim().is_empty() {
-        // Fallback: remove timestamped lines and banner
-        let mut filtered = String::new();
-        for l in s.lines() {
-            if is_timestamp_line(l) { continue; }
-            if is_noise_line(l) { continue; }
-            filtered.push_str(l);
-            filtered.push('\n');
-        }
-        return filtered;
+    for l in s.lines() {
+        if is_timestamp_line(l) { continue; }
+        if is_noise_line(l) { continue; }
+        out.push_str(l);
+        out.push('\n');
     }
     out
 }

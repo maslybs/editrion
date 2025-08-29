@@ -80,5 +80,15 @@
   "button.save": "保存",
   "button.dontSave": "保存しない",
   "button.cancel": "キャンセル",
-  "codex.titleTransform": "何をしたいですか？"
+  "codex.titleTransform": "何をしたいですか？",
+  "codex.instruction.placeholder": "例: 日本語に翻訳",
+  "ai.modal.reasoningEffort": "推論の強度",
+  "ai.modal.reasoningEffort.minimal": "最小",
+  "ai.modal.reasoningEffort.low": "低",
+  "ai.modal.reasoningEffort.medium": "中",
+  "ai.modal.reasoningEffort.high": "高",
+  "ai.modal.saveTemplate": "テンプレートとして保存",
+  "ai.modal.promptTemplateName": "テンプレート名:"
+  ,
+  "info.templateSaved": "テンプレートを保存しました"
 }
