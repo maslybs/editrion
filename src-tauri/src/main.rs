@@ -39,7 +39,8 @@ async fn codex_exec_stream(state: State<'_, AppState>, window: tauri::Window, pr
 fn run_codex_exec_stream(procs_map: Arc<Mutex<HashMap<String, Arc<Mutex<Child>>>>>, window: tauri::Window, prompt: String, cwd: Option<String>, run_id: String) -> Result<(), String> {
     let spawn = || -> std::io::Result<Child> {
         let use_pty = std::env::var("CODEX_STREAM_PTY").map(|v| v != "0").unwrap_or(true);
-        let prefer_tui = std::env::var("CODEX_STREAM_TUI").map(|v| v != "0").unwrap_or(true);
+        // Prefer non-TUI streaming by default to reduce noise in editor
+        let prefer_tui = std::env::var("CODEX_STREAM_TUI").map(|v| v != "0").unwrap_or(false);
         #[cfg(not(target_os = "windows"))]
         if use_pty {
             // Try to wrap with 'script' to allocate a PTY for faster flushes
@@ -113,7 +114,8 @@ fn run_codex_exec_stream(procs_map: Arc<Mutex<HashMap<String, Arc<Mutex<Child>>>
             let mut tmp = [0u8; 2048];
             let mut acc = String::new();
             // prefer TUI: start streaming as soon as a non-meta chunk arrives
-            let prefer_tui = std::env::var("CODEX_STREAM_TUI").map(|v| v != "0").unwrap_or(true);
+            // Keep consistent default: prefer non-TUI unless explicitly enabled
+            let prefer_tui = std::env::var("CODEX_STREAM_TUI").map(|v| v != "0").unwrap_or(false);
             let mut started_content = false;
             fn is_meta_line(line: &str) -> bool {
                 let ls = line.trim();
@@ -145,9 +147,11 @@ fn run_codex_exec_stream(procs_map: Arc<Mutex<HashMap<String, Arc<Mutex<Child>>>
                 if lower.contains("cursor position could not be read") { return true; }
                 if lower.contains("could not read cursor position") { return true; }
                 // Sometimes control-D/EOT gets echoed as a literal or caret notation
-                if ls == "^D" { return true; }
+                if ls == "^D" || ls.contains("^D") { return true; }
                 // Hide generic prompt read failures
                 if lower.starts_with("error:") && lower.contains("cursor") { return true; }
+                // Hide missing node interpreter error from shebang scripts
+                if lower.contains("env: node:") { return true; }
                 false
             }
             let emit = |text: &str| {
