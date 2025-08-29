@@ -5,7 +5,6 @@ use tauri::{Emitter, Manager, State};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio, Child};
-use std::time::{Duration, Instant};
 use std::io::{BufRead, BufReader};
 use std::sync::{Arc, Mutex};
 
@@ -20,13 +19,6 @@ fn read_file(path: String) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&bytes).to_string())
 }
 
-#[tauri::command]
-async fn codex_exec(prompt: String, cwd: Option<String>) -> Result<String, String> {
-    // Run potentially blocking process work off the main thread to keep UI responsive
-    tauri::async_runtime::spawn_blocking(move || run_codex_exec(prompt, cwd))
-        .await
-        .map_err(|e| format!("Failed to join codex worker: {}", e))?
-}
 
 #[tauri::command]
 async fn codex_exec_stream(state: State<'_, AppState>, window: tauri::Window, prompt: String, cwd: Option<String>, run_id: String, model: Option<String>, config: Option<HashMap<String, String>>) -> Result<(), String> {
@@ -129,6 +121,21 @@ fn run_codex_exec_stream(procs_map: Arc<Mutex<HashMap<String, Arc<Mutex<Child>>>
                 if ls.starts_with("tokens used:") { return true; }
                 false
             }
+            fn is_error_or_limit_line(line: &str) -> bool {
+                let ls = line.trim();
+                if ls.is_empty() { return false; }
+                // Check for various error patterns
+                if ls.starts_with("ERROR:") { return true; }
+                if ls.contains("usage limit") || ls.contains("rate limit") { return true; }
+                if ls.contains("Upgrade to Pro") { return true; }
+                if ls.contains("try again in") { return true; }
+                if ls.starts_with("Error:") { return true; }
+                // Also check for API error patterns
+                if ls.contains("API error") { return true; }
+                if ls.contains("insufficient credits") { return true; }
+                if ls.contains("quota exceeded") { return true; }
+                false
+            }
             fn is_noise_line(line: &str) -> bool {
                 let ls = line.trim();
                 if ls.is_empty() { return true; }
@@ -142,6 +149,19 @@ fn run_codex_exec_stream(procs_map: Arc<Mutex<HashMap<String, Arc<Mutex<Child>>>
                 if lower.starts_with("error:") && lower.contains("cursor") { return true; }
                 // Hide missing node interpreter error from shebang scripts
                 if lower.contains("env: node:") { return true; }
+                // Hide system prompts that shouldn't be shown to user
+                if ls.starts_with("Return only the transformed text") { return true; }
+                if ls == "Return only the transformed text." { return true; }
+                // Hide other common system messages
+                if ls.starts_with("Transform this text:") { return true; }
+                if ls.starts_with("Please provide only the") { return true; }
+                // Hide user input that gets echoed back
+                if ls.starts_with("--- INPUT START ---") { return true; }
+                if ls.starts_with("--- INPUT END ---") { return true; }
+                // Skip single word lines that could be user input echoes
+                if ls.len() < 50 && !ls.contains(' ') && ls.chars().all(|c| c.is_alphabetic() || c.is_whitespace()) {
+                    return true;
+                }
                 false
             }
             let emit = |text: &str| {
@@ -159,60 +179,89 @@ fn run_codex_exec_stream(procs_map: Arc<Mutex<HashMap<String, Arc<Mutex<Child>>>
                 if chunk.is_empty() { continue; }
                 let chunk = strip_ansi(&chunk);
                 acc.push_str(&chunk);
-                // process complete lines; emit non-meta only after assistant marker
+                // Check for error patterns in the accumulating text
+                let has_error = acc.contains("ERROR:") || acc.contains("usage limit") || acc.contains("rate limit");
+                
+                // Process complete lines
                 loop {
                     if let Some(pos) = acc.find('\n') {
                         let line = acc[..pos].to_string();
-                        // remove the processed part including the newline
                         acc.drain(..=pos);
-                        let _ls = line.trim_start();
-                        // Skip meta-only lines like summaries and banners
-                        if is_meta_line(&line) || is_noise_line(&line) {
-                            continue;
+                        
+                        if has_error {
+                            // If there's an error, emit everything as is
+                            emit(&format!("{}\n", line));
+                        } else {
+                            // Normal operation - filter out metadata
+                            if !is_meta_line(&line) && !is_noise_line(&line) {
+                                let content_line = if line.starts_with('[') {
+                                    if let Some(end) = line.find(']') {
+                                        let mut rest = &line[end + 1..];
+                                        rest = rest.trim_start();
+                                        if rest.starts_with("codex") {
+                                            rest = &rest["codex".len()..];
+                                            rest = rest.trim_start();
+                                        }
+                                        rest.to_string()
+                                    } else { line.clone() }
+                                } else { line.clone() };
+                                
+                                if !content_line.trim().is_empty() {
+                                    emit(&format!("{}\n", content_line));
+                                }
+                            }
                         }
-                        let content_line = if line.starts_with('[') {
-                            if let Some(end) = line.find(']') {
-                                let mut rest = &line[end + 1..];
+                    } else {
+                        break;
+                    }
+                }
+                // Handle partial content
+                if !acc.is_empty() {
+                    let has_error_in_acc = acc.contains("ERROR:") || acc.contains("usage limit") || acc.contains("rate limit");
+                    
+                    if has_error_in_acc {
+                        emit(&acc);
+                        acc.clear();
+                    } else if !acc.starts_with('[') || acc.find(']').is_some() {
+                        let tail = if acc.starts_with('[') {
+                            if let Some(end) = acc.find(']') {
+                                let mut rest = &acc[end + 1..];
                                 rest = rest.trim_start();
                                 if rest.starts_with("codex") {
                                     rest = &rest["codex".len()..];
                                     rest = rest.trim_start();
                                 }
                                 rest.to_string()
-                            } else { line.clone() }
-                        } else { line.clone() };
-                        if !content_line.is_empty() {
-                            emit(&format!("{}\n", content_line));
+                            } else { acc.clone() }
+                        } else { acc.clone() };
+                        
+                        if !tail.trim().is_empty() && !is_noise_line(&tail) && !is_meta_line(&tail) {
+                            emit(&tail);
                         }
-                    } else {
-                        break;
+                        acc.clear();
                     }
-                }
-                // Emit any partial tail without newline as soon as it's not meta/noise
-                if !acc.is_empty() {
-                    // If partial tail has a timestamp prefix and we haven't seen ']' yet, wait for completion
-                    if acc.starts_with('[') && acc.find(']').is_none() {
-                        continue;
-                    }
-                    let tail = if acc.starts_with('[') {
-                        if let Some(end) = acc.find(']') {
-                            let mut rest = &acc[end + 1..];
-                            rest = rest.trim_start();
-                            if rest.starts_with("codex") {
-                                rest = &rest["codex".len()..];
-                                rest = rest.trim_start();
-                            }
-                            rest.to_string()
-                        } else { acc.clone() }
-                    } else { acc.clone() };
-                    if !tail.is_empty() && !is_noise_line(&tail) && !is_meta_line(&tail) { emit(&tail); }
-                    acc.clear();
                 }
             }
         });
         join_handles.push(h);
     }
-    // Do not forward stderr to UI to avoid exposing system noise.
+    // Process stderr - just capture it, don't emit to avoid duplicates
+    let mut err = { child_arc.lock().ok().and_then(|mut c| c.stderr.take()) };
+    if let Some(mut err) = err.take() {
+        let buf = stdout_buf.clone();
+        let h = std::thread::spawn(move || {
+            use std::io::Read;
+            let mut tmp = [0u8; 1024];
+            while let Ok(n) = err.read(&mut tmp) {
+                if n == 0 { break; }
+                let chunk = String::from_utf8_lossy(&tmp[..n]).to_string();
+                if chunk.is_empty() { continue; }
+                let chunk = strip_ansi(&chunk);
+                if let Ok(mut b) = buf.lock() { b.push_str(&chunk); }
+            }
+        });
+        join_handles.push(h);
+    }
 
     let status = { child_arc.lock().map_err(|e| e.to_string())?.wait().map_err(|e| e.to_string())? };
     for h in join_handles { let _ = h.join(); }
@@ -220,102 +269,27 @@ fn run_codex_exec_stream(procs_map: Arc<Mutex<HashMap<String, Arc<Mutex<Child>>>
     // unregister process
     if let Ok(mut m) = procs_map.lock() { m.remove(&run_id); }
 
-    let cleaned = if let Ok(b) = stdout_buf.lock() { clean_codex_output(&b) } else { String::new() };
+    let _cleaned = if let Ok(b) = stdout_buf.lock() { clean_codex_output(&b) } else { String::new() };
+    let output_text = if let Ok(b) = stdout_buf.lock() { b.clone() } else { String::new() };
+    
     if status.success() {
         let _ = window.emit("codex-complete", &serde_json::json!({
             "runId": run_id,
             "ok": true,
-            "output": cleaned,
+            "output": output_text,
         }));
         Ok(())
     } else {
-        let err_s = if let Ok(b) = stdout_buf.lock() { b.clone() } else { String::new() };
         let _ = window.emit("codex-complete", &serde_json::json!({
             "runId": run_id,
             "ok": false,
-            "error": err_s,
+            "error": output_text,
         }));
         Err("codex exec failed".to_string())
     }
 }
 
-fn run_codex_exec(prompt: String, cwd: Option<String>) -> Result<String, String> {
-    // Try running via resolved absolute path first
-    if let Some(codex_bin) = resolve_codex_path() {
-        match spawn_and_collect(|| {
-            let mut cmd = Command::new(&codex_bin);
-            cmd.arg("exec").arg("--skip-git-repo-check").arg(&prompt);
-            if let Some(ref dir) = cwd { if Path::new(dir).is_dir() { let _ = cmd.current_dir(dir); } }
-            cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
-            cmd.spawn()
-        }) {
-            Ok(s) => return Ok(clean_codex_output(&s)),
-            Err(e) => {
-                // Fall through to zsh login shell attempt
-                eprintln!("direct codex spawn failed: {}", e);
-            }
-        }
-    }
 
-    // Fallback: run through login shell to load NVM/Brew PATH
-    let cmdline = format!("codex exec --skip-git-repo-check {}", shell_quote(&prompt));
-    match spawn_and_collect(|| {
-        let mut cmd = Command::new("/bin/zsh");
-        cmd.arg("-lc").arg(&cmdline);
-        if let Some(ref dir) = cwd { if Path::new(dir).is_dir() { let _ = cmd.current_dir(dir); } }
-        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
-        cmd.spawn()
-    }) {
-        Ok(s) => Ok(clean_codex_output(&s)),
-        Err(e) => {
-            let path_env = std::env::var("PATH").unwrap_or_default();
-            Err(format!(
-                "Failed to start codex via zsh. Error: {}\nPATH: {}\nTry setting CODEX_BIN to absolute path of codex, or run 'codex' once in a terminal to sign in.",
-                e, path_env
-            ))
-        }
-    }
-}
-
-#[tauri::command]
-async fn codex_exec_with_opts(prompt: String, cwd: Option<String>, model: Option<String>, config: Option<HashMap<String, String>>) -> Result<String, String> {
-    let mut pre_flags: Vec<String> = Vec::new();
-    if let Some(m) = model.as_ref() { pre_flags.push("--model".into()); pre_flags.push(m.clone()); }
-    if let Some(cfg) = config.as_ref() { for (k, v) in cfg.iter() { pre_flags.push("-c".into()); pre_flags.push(format!("{}={}", k, v)); } }
-    // Try running via resolved absolute path first
-    if let Some(codex_bin) = resolve_codex_path() {
-        match spawn_and_collect(|| {
-            let mut cmd = Command::new(&codex_bin);
-            cmd.arg("exec").arg("--skip-git-repo-check"); for a in &pre_flags { cmd.arg(a); } cmd.arg(&prompt);
-            if let Some(ref dir) = cwd { if Path::new(dir).is_dir() { let _ = cmd.current_dir(dir); } }
-            cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
-            cmd.spawn()
-        }) {
-            Ok(s) => return Ok(clean_codex_output(&s)),
-            Err(e) => {
-                eprintln!("direct codex spawn failed: {}", e);
-            }
-        }
-    }
-    let flags = if pre_flags.is_empty() { String::new() } else { format!("{} ", pre_flags.join(" ")) };
-    let cmdline = format!("codex exec --skip-git-repo-check {}{}", flags, shell_quote(&prompt));
-    match spawn_and_collect(|| {
-        let mut cmd = Command::new("/bin/zsh");
-        cmd.arg("-lc").arg(&cmdline);
-        if let Some(ref dir) = cwd { if Path::new(dir).is_dir() { let _ = cmd.current_dir(dir); } }
-        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
-        cmd.spawn()
-    }) {
-        Ok(s) => Ok(clean_codex_output(&s)),
-        Err(e) => {
-            let path_env = std::env::var("PATH").unwrap_or_default();
-            Err(format!(
-                "Failed to start codex via zsh. Error: {}\nPATH: {}\nTry setting CODEX_BIN to absolute path of codex, or run 'codex' once in a terminal to sign in.",
-                e, path_env
-            ))
-        }
-    }
-}
 
 #[tauri::command]
 async fn codex_login_stream(window: tauri::Window, run_id: String) -> Result<(), String> {
@@ -466,31 +440,6 @@ fn resolve_codex_path() -> Option<std::path::PathBuf> {
     None
 }
 
-fn spawn_and_collect<F>(spawn: F) -> Result<String, String>
-where
-    F: FnOnce() -> std::io::Result<Child>,
-{
-    let mut child = spawn().map_err(|e| e.to_string())?;
-    let start = Instant::now();
-    let timeout = Duration::from_secs(90);
-    loop {
-        if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
-            let out = child.wait_with_output().map_err(|e| e.to_string())?;
-            if status.success() {
-                return Ok(String::from_utf8_lossy(&out.stdout).to_string());
-            } else {
-                let mut err = String::from_utf8_lossy(&out.stderr).to_string();
-                if err.trim().is_empty() { err = String::from_utf8_lossy(&out.stdout).to_string(); }
-                return Err(format!("codex exited with code {}: {}", status.code().unwrap_or(-1), err));
-            }
-        }
-        if start.elapsed() > timeout {
-            let _ = child.kill();
-            return Err("codex exec timed out. Ensure you're signed in: run 'codex' in a terminal once.".to_string());
-        }
-        std::thread::sleep(Duration::from_millis(150));
-    }
-}
 
 fn shell_quote(s: &str) -> String {
     let mut out = String::from("'");
@@ -560,6 +509,19 @@ fn extract_codex_result(s: &str) -> String {
         if lower.contains("could not read cursor position") { return true; }
         if ls == "^D" || ls.contains("^D") { return true; }
         if lower.starts_with("error:") && lower.contains("cursor") { return true; }
+        // Hide system prompts that shouldn't be shown to user
+        if ls.starts_with("Return only the transformed text") { return true; }
+        if ls == "Return only the transformed text." { return true; }
+        // Hide other common system messages
+        if ls.starts_with("Transform this text:") { return true; }
+        if ls.starts_with("Please provide only the") { return true; }
+        // Hide user input that gets echoed back
+        if ls.starts_with("--- INPUT START ---") { return true; }
+        if ls.starts_with("--- INPUT END ---") { return true; }
+        // Skip single word lines that could be user input echoes
+        if ls.len() < 50 && !ls.contains(' ') && ls.chars().all(|c| c.is_alphabetic() || c.is_whitespace()) {
+            return true;
+        }
         false
     }
     for l in s.lines() {
@@ -861,7 +823,7 @@ fn main() {
                 let _ = window.emit("menu-event", id);
             }
         })
-        .invoke_handler(tauri::generate_handler![read_file, write_file, read_dir, create_new_file, menu_action, quit_app, rebuild_menu, drafts_dir, remove_file, clear_dir, codex_exec, codex_exec_stream, codex_login_stream, codex_cancel, codex_config_path, codex_config_set, codex_exec_with_opts])
+        .invoke_handler(tauri::generate_handler![read_file, write_file, read_dir, create_new_file, menu_action, quit_app, rebuild_menu, drafts_dir, remove_file, clear_dir, codex_exec_stream, codex_login_stream, codex_cancel, codex_config_path, codex_config_set])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
