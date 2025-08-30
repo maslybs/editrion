@@ -149,8 +149,14 @@ export class App {
     if (this.draftTimers[tab.id]) window.clearTimeout(this.draftTimers[tab.id]);
     this.draftTimers[tab.id] = window.setTimeout(async () => {
       try {
+        const current = tabsStore.getTab(tab.id);
         const draftPath = `${this.draftsDir}/${tab.id}.json`;
-        const payload = { id: tab.id, name: tab.name, path: tab.path, content, ts: Date.now() };
+        // Only persist a draft if the tab is dirty; otherwise remove any leftover draft
+        if (!current || !current.isDirty) {
+          try { await tauriApi.removeFile(draftPath); } catch {}
+          return;
+        }
+        const payload = { id: tab.id, name: current.name, path: current.path, content, ts: Date.now() };
         await tauriApi.writeFile(draftPath, JSON.stringify(payload));
       } catch (e) { console.warn('Failed to save draft', e); }
     }, 400);
