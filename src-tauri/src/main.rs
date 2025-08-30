@@ -10,6 +10,8 @@ mod menu;
 
 use app_state::AppState;
 use tauri::Manager;
+#[cfg(not(target_os = "macos"))]
+use tauri::Emitter;
 
 fn main() {
     let app = tauri::Builder::default()

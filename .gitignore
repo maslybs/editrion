@@ -38,6 +38,7 @@ src-tauri/gen/
 # Local signing/notarization helpers (keep out of public repo)
 src-tauri/Entitlements.plist
 scripts/sign-notarize-mac.sh
+/scripts
 
 # Cache directories
 .cache/

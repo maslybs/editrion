@@ -10,6 +10,7 @@ pub struct ProcessManager {
     pub processes: HashMap<String, Arc<Mutex<Child>>>,
 }
 
+#[allow(dead_code)]
 impl ProcessManager {
     pub fn new() -> Self {
         Self {
@@ -18,12 +19,14 @@ impl ProcessManager {
     }
 
     /// Add a new process to management
+    #[allow(dead_code)]
     pub fn add_process(&mut self, run_id: String, child: Child) {
         let child_arc = Arc::new(Mutex::new(child));
         self.processes.insert(run_id, child_arc);
     }
 
     /// Get a process by run_id
+    #[allow(dead_code)]
     pub fn get_process(&self, run_id: &str) -> Option<Arc<Mutex<Child>>> {
         self.processes.get(run_id).cloned()
     }
@@ -45,6 +48,7 @@ impl ProcessManager {
     }
 
     /// Get count of active processes
+    #[allow(dead_code)]
     pub fn active_count(&self) -> usize {
         self.processes.len()
     }
