@@ -202,6 +202,9 @@ export class Editor {
             const anchorPos = sel ? sel.getStartPosition() : (caret || model.getFullModelRange().getStartPosition());
             insertOffset = model.getOffsetAt(anchorPos);
           }
+          let programmaticEdit = false;
+          let userMoved = false;
+          const cursorDisp = editor.onDidChangeCursorPosition(() => { if (!programmaticEdit) userMoved = true; });
           // chunking handled by this.chunkForInsert
           const unsubs: Array<() => void> = [];
           const addUnsub = (fn: () => void) => unsubs.push(fn);
@@ -254,7 +257,8 @@ export class Editor {
                 edits.push({ range: new monaco.Range(pos.lineNumber, pos.column, pos.lineNumber, pos.column), text: seg, forceMoveMarkers: true });
                 insertOffset += seg.length;
               }
-              if (edits.length) editor.executeEdits('codex', edits);
+              if (edits.length) { programmaticEdit = true; editor.executeEdits('codex', edits); programmaticEdit = false; }
+              if (!userMoved && model) { const pos = model.getPositionAt(insertOffset); programmaticEdit = true; editor.setPosition(pos); programmaticEdit = false; }
               if (textOut.length > 0) insertedAny = true;
             }
           });
@@ -271,7 +275,8 @@ export class Editor {
               const finalText = base.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
               if (hasSelection && sel) {
                 const trimmed = finalText.replace(/^\s+/, '').replace(/\s+$/, '');
-                editor.executeEdits('codex', [{ range: sel, text: trimmed, forceMoveMarkers: true }]);
+                programmaticEdit = true; editor.executeEdits('codex', [{ range: sel, text: trimmed, forceMoveMarkers: true }]); programmaticEdit = false;
+                if (!userMoved && model) { const startOffset = model.getOffsetAt(sel.getStartPosition()); const endPos = model.getPositionAt(startOffset + trimmed.length); programmaticEdit = true; editor.setPosition(endPos); programmaticEdit = false; }
               } else if (outBuf.length === 0) {
                 const trimmed = finalText.replace(/^\s+/, '').replace(/\s+$/, '');
                 const segments = this.chunkForInsert(trimmed, 24);
@@ -281,7 +286,8 @@ export class Editor {
                   edits.push({ range: new monaco.Range(pos.lineNumber, pos.column, pos.lineNumber, pos.column), text: seg, forceMoveMarkers: true });
                   insertOffset += seg.length;
                 }
-                if (edits.length) editor.executeEdits('codex', edits);
+                if (edits.length) { programmaticEdit = true; editor.executeEdits('codex', edits); programmaticEdit = false; }
+                if (!userMoved && model) { const pos = model.getPositionAt(insertOffset); programmaticEdit = true; editor.setPosition(pos); programmaticEdit = false; }
               } else {
                 // Streamed case: trim trailing whitespace from end of inserted buffer
                 const m = finalText.match(/\s+$/);
@@ -290,7 +296,9 @@ export class Editor {
                   if (trailing > 0) {
                     const endPos = model.getPositionAt(insertOffset);
                     const startPos = model.getPositionAt(insertOffset - trailing);
-                    editor.executeEdits('codex', [{ range: new monaco.Range(startPos.lineNumber, startPos.column, endPos.lineNumber, endPos.column), text: '' }]);
+                    programmaticEdit = true; editor.executeEdits('codex', [{ range: new monaco.Range(startPos.lineNumber, startPos.column, endPos.lineNumber, endPos.column), text: '' }]); programmaticEdit = false;
+                    insertOffset -= trailing;
+                    if (!userMoved && model) { const pos = model.getPositionAt(insertOffset); programmaticEdit = true; editor.setPosition(pos); programmaticEdit = false; }
                   }
                 }
               }
@@ -301,6 +309,7 @@ export class Editor {
               alert('AI failed to run. Please ensure the Codex CLI is installed and available in PATH.\n\n' + err);
             }
             try { document.body.removeChild(streamBox); } catch {}
+            try { cursorDisp.dispose(); } catch {}
           });
           addUnsub(() => { onDone(); });
 
@@ -334,7 +343,7 @@ export class Editor {
       overlay.style.zIndex = '10000';
 
       const box = document.createElement('div');
-      box.style.width = 'min(520px, 92vw)';
+      box.style.width = 'min(680px, 92vw)';
       box.style.background = 'var(--panel-bg, #1e1e1e)';
       box.style.color = 'var(--text, #fff)';
       box.style.borderRadius = '10px';
@@ -356,7 +365,9 @@ export class Editor {
       const instr = document.createElement('textarea');
       instr.placeholder = t('codex.instruction.placeholder') || 'e.g., Translate to Ukrainian';
       instr.style.width = '100%';
-      instr.style.minHeight = '120px';
+      instr.style.minHeight = '160px';
+      instr.style.maxHeight = '50vh';
+      instr.style.overflow = 'auto';
       instr.style.padding = '10px';
       instr.style.borderRadius = '6px';
       instr.style.border = '1px solid rgba(255,255,255,0.1)';
@@ -378,10 +389,17 @@ export class Editor {
       effRow.style.gap = '12px';
       const efforts: Array<'minimal'|'low'|'medium'|'high'> = ['minimal','low','medium','high'];
       let effValue: ''|'minimal'|'low'|'medium'|'high' = '';
+      try {
+        const raw = localStorage.getItem('editrion.aiOverrides');
+        const saved = raw ? JSON.parse(raw) : {};
+        if (saved && typeof saved.effort === 'string' && efforts.includes(saved.effort)) effValue = saved.effort;
+      } catch {}
+      if (effValue === '') effValue = 'minimal';
       for (const v of efforts) {
         const lbl = document.createElement('label');
         lbl.style.display = 'flex'; lbl.style.alignItems = 'center'; lbl.style.gap = '6px';
         const rb = document.createElement('input'); rb.type = 'radio'; rb.name = 'effort'; rb.value = v;
+        if (effValue === v) rb.checked = true;
         rb.addEventListener('change', () => { effValue = v; });
         const span = document.createElement('span');
         span.textContent = t(`ai.modal.reasoningEffort.${v}`) || v;
@@ -422,7 +440,16 @@ export class Editor {
 
       const cleanup = (value: { instruction: string; effort?: string } | null) => { overlay.remove(); resolve(value); };
       btnCancel.addEventListener('click', () => cleanup(null));
-      btnRun.addEventListener('click', () => { btnRun.disabled = true; btnCancel.disabled = true; instr.disabled = true; cleanup({ instruction: instr.value || 'Translate to Ukrainian', effort: effValue || undefined }); });
+      btnRun.addEventListener('click', () => {
+        btnRun.disabled = true; btnCancel.disabled = true; instr.disabled = true;
+        try {
+          const raw = localStorage.getItem('editrion.aiOverrides');
+          const saved = raw ? JSON.parse(raw) : {};
+          saved.effort = effValue || 'minimal';
+          localStorage.setItem('editrion.aiOverrides', JSON.stringify(saved));
+        } catch {}
+        cleanup({ instruction: instr.value || 'Translate to Ukrainian', effort: effValue || undefined });
+      });
       overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(null); });
       instr.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') { e.preventDefault(); cleanup(null); }

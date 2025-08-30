@@ -68,6 +68,8 @@ export class App {
     // Welcome actions
     const welcomeOpenFileBtn = document.getElementById('welcome-open-file');
     welcomeOpenFileBtn?.addEventListener('click', () => this.openFile());
+    const welcomeNewFileBtn = document.getElementById('welcome-new-file');
+    welcomeNewFileBtn?.addEventListener('click', () => this.createNewFile());
 
     // Events
     this.setupShortcuts();
@@ -179,6 +181,9 @@ export class App {
 
   private setupShortcuts() {
     document.addEventListener('keydown', (e) => {
+      // Ignore app shortcuts while typing in modal dialogs (AI etc.)
+      const target = e.target as HTMLElement;
+      if (target && target.closest('.modal')) return;
       // Block page reload in Tauri (Cmd/Ctrl+R, Shift+Cmd/Ctrl+R, F5)
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'r') {
         e.preventDefault();
