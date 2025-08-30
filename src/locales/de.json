@@ -16,6 +16,11 @@
   "context.closeOthers": "Andere schließen",
   "context.closeRight": "Tabs rechts schließen",
   "context.removeProject": "Projekt entfernen",
+  "context.close": "Schließen",
+  "context.closeAll": "Alle schließen",
+  "context.rename": "Umbenennen",
+  "context.revealInExplorer": "Im Explorer anzeigen",
+  "context.copyPath": "Pfad kopieren",
 
   "dialog.saveFile": "Datei speichern",
   "dialog.saveAs": "Speichern unter",
@@ -63,6 +68,7 @@
 
   "menu.item.window.show": "Fenster anzeigen",
   "menu.item.resetSettings": "Alle Einstellungen zurücksetzen",
+  "menu.item.ai": "KI fragen",
 
   "menu.item.lang.en": "English",
   "menu.item.lang.uk": "Українська",
@@ -95,4 +101,6 @@
   "ai.modal.promptTemplateName": "Name der Vorlage:"
   ,
   "info.templateSaved": "Vorlage gespeichert"
+  ,
+  "ai.settings.title": "AI-Einstellungen"
 }

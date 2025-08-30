@@ -52,6 +52,8 @@ export class App {
     registerDictionaries('de', de as any);
     initI18n();
     applyTranslations();
+    // Ensure native menu uses current locale labels
+    this.updateNativeMenuLabels();
 
     // Theme
     const savedTheme = localStorage.getItem('editrion.theme') || 'dark';
@@ -316,6 +318,7 @@ export class App {
         case 'language_ja': setLocale('ja'); applyTranslations(); await this.updateNativeMenuLabels(); break;
         case 'language_de': setLocale('de'); applyTranslations(); await this.updateNativeMenuLabels(); break;
         case 'ai_open_config': await this.openAiConfig(); break;
+        case 'ai_settings': await this.openAiDefaultsModal(); break;
         case 'ai_model_o3': this.setAiOverrideModel('o3'); break;
         case 'ai_model_gpt5': this.setAiOverrideModel('gpt-5'); break;
         case 'ai_reasoning_effort_minimal': this.setAiOverrideEffort('minimal'); break;
@@ -471,6 +474,51 @@ export class App {
       const name = this.basename(path);
       await this.openFileByPath(path, name);
     } catch (e) { console.error('Failed to open AI config:', e); alert('Failed to open AI config.'); }
+  }
+
+  private async openAiDefaultsModal() {
+    return new Promise<void>((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay show';
+      const modal = document.createElement('div');
+      modal.className = 'modal';
+      const title = document.createElement('h3');
+      title.textContent = t('ai.settings.title') || 'AI Settings';
+      const body = document.createElement('div');
+      body.style.marginTop = '8px';
+
+      const label = document.createElement('div');
+      label.textContent = t('ai.modal.reasoningEffort');
+      label.style.fontSize = '12px';
+      label.style.marginBottom = '6px';
+      const row = document.createElement('div');
+      row.style.display = 'flex'; row.style.gap = '12px';
+      const efforts: Array<'minimal'|'low'|'medium'|'high'> = ['minimal','low','medium','high'];
+      let eff: 'minimal'|'low'|'medium'|'high' = 'minimal';
+      try { const raw = localStorage.getItem('editrion.aiOverrides'); const saved = raw ? JSON.parse(raw) : {}; if (saved.effort && efforts.includes(saved.effort)) eff = saved.effort; } catch {}
+      efforts.forEach(v => {
+        const lbl = document.createElement('label'); lbl.style.display = 'flex'; lbl.style.alignItems = 'center'; lbl.style.gap = '6px';
+        const rb = document.createElement('input'); rb.type = 'radio'; rb.name = 'eff_default'; rb.value = v; if (eff === v) rb.checked = true; rb.addEventListener('change', () => { eff = v; });
+        const span = document.createElement('span'); span.textContent = t(`ai.modal.reasoningEffort.${v}`) || v;
+        lbl.append(rb, span); row.appendChild(lbl);
+      });
+      body.appendChild(label); body.appendChild(row);
+
+      const actions = document.createElement('div'); actions.className = 'actions';
+      const btnCancel = document.createElement('button'); btnCancel.className = 'btn'; btnCancel.textContent = t('button.cancel');
+      const btnSave = document.createElement('button'); btnSave.className = 'btn primary'; btnSave.textContent = t('button.save');
+      actions.append(btnCancel, btnSave);
+      modal.append(title, body, actions);
+      overlay.append(modal);
+      document.body.append(overlay);
+      const cleanup = () => { overlay.remove(); resolve(); };
+      btnCancel.addEventListener('click', cleanup);
+      btnSave.addEventListener('click', () => {
+        try { const raw = localStorage.getItem('editrion.aiOverrides'); const saved = raw ? JSON.parse(raw) : {}; saved.effort = eff; localStorage.setItem('editrion.aiOverrides', JSON.stringify(saved)); } catch {}
+        cleanup();
+      });
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(); });
+    });
   }
 
   private basename(path: string): string { const parts = path.split(/[/\\]/); return parts.pop() || path; }

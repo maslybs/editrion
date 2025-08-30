@@ -4,6 +4,7 @@
   "sidebar.addFolder": "＋ Add Folder",
   "welcome.title": "Welcome to Editrion (Beta)",
   "welcome.subtitle": "Open a file or add a folder to get started.",
+  "welcome.hintNewFile": "Or press Cmd+N to create a new file.",
   "welcome.openFile": "Open File",
   "welcome.addFolder": "Add Folder",
 
@@ -16,6 +17,11 @@
   "context.closeOthers": "Close Others",
   "context.closeRight": "Close Tabs to the Right",
   "context.removeProject": "Remove Project",
+  "context.close": "Close",
+  "context.closeAll": "Close All",
+  "context.rename": "Rename",
+  "context.revealInExplorer": "Show in Explorer",
+  "context.copyPath": "Copy Path",
 
   "dialog.saveFile": "Save File",
   "dialog.saveAs": "Save As",
@@ -63,6 +69,7 @@
 
   "menu.item.window.show": "Show Window",
   "menu.item.resetSettings": "Reset All Settings",
+  "menu.item.ai": "Ask AI",
 
   "menu.item.lang.en": "English",
   "menu.item.lang.uk": "Українська",
@@ -105,4 +112,6 @@
   ,
   "confirm.resetSettings": "Reset all settings to defaults?",
   "alert.settingsResetDone": "Settings have been reset."
+  ,
+  "ai.settings.title": "AI Settings"
 }

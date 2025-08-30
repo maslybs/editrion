@@ -512,7 +512,24 @@ body {
   cursor: pointer;
 }
 
+/* Ensure standalone buttons still look correct even outside strict .modal scope */
+.btn {
+  background: var(--button-bg);
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 .modal .btn.primary {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+
+.btn.primary {
   background: var(--accent);
   color: var(--bg);
   border-color: var(--accent);

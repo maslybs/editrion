@@ -4,6 +4,7 @@
   "sidebar.addFolder": "＋ Додати теку",
   "welcome.title": "Ласкаво просимо до Editrion (Бета)",
   "welcome.subtitle": "Відкрийте файл або додайте теку, щоб почати.",
+  "welcome.hintNewFile": "Або натисніть Cmd+N, щоб створити новий файл.",
   "welcome.openFile": "Відкрити файл",
   "welcome.addFolder": "Додати теку",
 
@@ -16,6 +17,11 @@
   "context.closeOthers": "Закрити інші",
   "context.closeRight": "Закрити вкладки праворуч",
   "context.removeProject": "Видалити проєкт",
+  "context.close": "Закрити",
+  "context.closeAll": "Закрити всі",
+  "context.rename": "Перейменувати",
+  "context.revealInExplorer": "Показати у провіднику",
+  "context.copyPath": "Копіювати шлях",
 
   "dialog.saveFile": "Зберегти файл",
   "dialog.saveAs": "Зберегти як",
@@ -63,6 +69,7 @@
 
   "menu.item.window.show": "Показати вікно",
   "menu.item.resetSettings": "Скинути всі налаштування",
+  "menu.item.ai": "Запитати ШІ",
 
   "menu.item.lang.en": "English",
   "menu.item.lang.uk": "Українська",
@@ -104,4 +111,6 @@
   ,
   "confirm.resetSettings": "Скинути всі налаштування до стандартних?",
   "alert.settingsResetDone": "Налаштування скинуто."
+  ,
+  "ai.settings.title": "Налаштування AI"
 }

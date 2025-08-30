@@ -16,6 +16,11 @@
   "context.closeOthers": "他を閉じる",
   "context.closeRight": "右側のタブを閉じる",
   "context.removeProject": "プロジェクトを削除",
+  "context.close": "閉じる",
+  "context.closeAll": "すべて閉じる",
+  "context.rename": "名前を変更",
+  "context.revealInExplorer": "エクスプローラーで表示",
+  "context.copyPath": "パスをコピー",
 
   "dialog.saveFile": "ファイルを保存",
   "dialog.saveAs": "名前を付けて保存",
@@ -63,6 +68,8 @@
 
   "menu.item.window.show": "ウィンドウを表示",
   "menu.item.resetSettings": "すべての設定をリセット",
+  "menu.item.ai": "AI に聞く",
+  "menu.item.resetSettings": "すべての設定をリセット",
 
   "menu.item.lang.en": "English",
   "menu.item.lang.uk": "Українська",
@@ -94,4 +101,6 @@
   "ai.modal.promptTemplateName": "テンプレート名:"
   ,
   "info.templateSaved": "テンプレートを保存しました"
+  ,
+  "ai.settings.title": "AI 設定"
 }

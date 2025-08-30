@@ -16,6 +16,11 @@
   "context.closeOthers": "Fermer les autres",
   "context.closeRight": "Fermer les onglets à droite",
   "context.removeProject": "Supprimer le projet",
+  "context.close": "Fermer",
+  "context.closeAll": "Tout fermer",
+  "context.rename": "Renommer",
+  "context.revealInExplorer": "Afficher dans l’explorateur",
+  "context.copyPath": "Copier le chemin",
 
   "dialog.saveFile": "Enregistrer le fichier",
   "dialog.saveAs": "Enregistrer sous",
@@ -63,6 +68,8 @@
 
   "menu.item.window.show": "Afficher la fenêtre",
   "menu.item.resetSettings": "Réinitialiser tous les paramètres",
+  "menu.item.ai": "Demander à l’IA",
+  "menu.item.resetSettings": "Réinitialiser tous les paramètres",
 
   "menu.item.lang.en": "English",
   "menu.item.lang.uk": "Українська",
@@ -94,4 +101,6 @@
   "ai.modal.promptTemplateName": "Nom du modèle :"
   ,
   "info.templateSaved": "Modèle enregistré"
+  ,
+  "ai.settings.title": "Paramètres de l’IA"
 }

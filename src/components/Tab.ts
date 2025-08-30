@@ -1,5 +1,6 @@
 import type { Tab as TabData } from '../types';
 import { tabsStore } from '../store/tabsStore';
+import { t } from '../services/i18n';
 
 export class Tab {
   private element: HTMLElement;
@@ -96,15 +97,15 @@ export class Tab {
     menu.style.top = `${e.clientY}px`;
     
     menu.innerHTML = `
-      <div class="context-menu-item" data-action="close">Close</div>
-      <div class="context-menu-item" data-action="close-others">Close Others</div>
-      <div class="context-menu-item" data-action="close-right">Close Tabs to the Right</div>
-      <div class="context-menu-item" data-action="close-all">Close All</div>
+      <div class="context-menu-item" data-action="close">${t('context.close') || 'Close'}</div>
+      <div class="context-menu-item" data-action="close-others">${t('context.closeOthers')}</div>
+      <div class="context-menu-item" data-action="close-right">${t('context.closeRight')}</div>
+      <div class="context-menu-item" data-action="close-all">${t('context.closeAll') || 'Close All'}</div>
       <div class="context-menu-separator"></div>
-      <div class="context-menu-item" data-action="rename">Rename</div>
-      ${this.data.path ? `<div class="context-menu-item" data-action="reveal">Show in Explorer</div>` : ''}
+      <div class="context-menu-item" data-action="rename">${t('context.rename') || 'Rename'}</div>
+      ${this.data.path ? `<div class="context-menu-item" data-action="reveal">${t('context.revealInExplorer') || 'Show in Explorer'}</div>` : ''}
       <div class="context-menu-separator"></div>
-      <div class="context-menu-item" data-action="copy-path">Copy Path</div>
+      <div class="context-menu-item" data-action="copy-path">${t('context.copyPath') || 'Copy Path'}</div>
     `;
 
     // Add event listeners

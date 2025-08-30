@@ -10,10 +10,20 @@ export class Editor {
   private currentEditor?: monaco.editor.IStandaloneCodeEditor;
   private resizeObserver?: ResizeObserver;
   public onContentChanged?: (tab: Tab, content: string) => void;
+  private aiTemplates: Array<{ id: string; name: string; instruction: string; effort?: 'minimal'|'low'|'medium'|'high' }>; 
+  private macroActionIds: Set<string> = new Set();
+  private lastTabForModal?: Tab;
 
   constructor(container: HTMLElement) {
     this.container = container;
     this.setupResizeObserver();
+    this.aiTemplates = this.loadMacros();
+    // Try loading macros from persistent config file too (works in dev/prod)
+    this.tryLoadMacrosFromFile().then(() => {
+      if (this.currentEditor && this.lastTabForModal) {
+        this.registerMacroActions(this.currentEditor, this.lastTabForModal);
+      }
+    }).catch(()=>{});
   }
 
   // Breaks input into small segments preferring whitespace boundaries
@@ -102,8 +112,48 @@ export class Editor {
 
     // Register AI action in context menu
     this.registerAiAction(editor, tab);
+    // Register macro actions
+    this.registerMacroActions(editor, tab);
 
     return editor;
+  }
+
+  private loadMacros(): Array<{ id: string; name: string; instruction: string; effort?: any }> {
+    try {
+      const raw = localStorage.getItem('editrion.aiTemplates');
+      const arr = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(arr)) return arr;
+    } catch {}
+    return [];
+  }
+
+  private saveMacros() {
+    try { localStorage.setItem('editrion.aiTemplates', JSON.stringify(this.aiTemplates)); } catch {}
+    // Also persist to app config dir so it's available across sessions and build/dev origins
+    this.trySaveMacrosToFile().catch(()=>{});
+  }
+
+  private async tryLoadMacrosFromFile(): Promise<void> {
+    try {
+      const cfgPath = await tauriApi.getCodexConfigPath();
+      const dir = cfgPath.replace(/[/\\][^/\\]*$/, '');
+      const path = `${dir}/ai_templates.json`;
+      const raw = await tauriApi.readFile(path);
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) {
+        this.aiTemplates = arr;
+        try { localStorage.setItem('editrion.aiTemplates', JSON.stringify(arr)); } catch {}
+      }
+    } catch {}
+  }
+
+  private async trySaveMacrosToFile(): Promise<void> {
+    try {
+      const cfgPath = await tauriApi.getCodexConfigPath();
+      const dir = cfgPath.replace(/[/\\][^/\\]*$/, '');
+      const path = `${dir}/ai_templates.json`;
+      await tauriApi.writeFile(path, JSON.stringify(this.aiTemplates));
+    } catch {}
   }
 
   private setupEditorEvents(editor: monaco.editor.IStandaloneCodeEditor, tab: Tab): void {
@@ -131,7 +181,7 @@ export class Editor {
   private registerAiAction(editor: monaco.editor.IStandaloneCodeEditor, tab: Tab) {
     editor.addAction({
       id: 'codex.runOnSelection',
-      label: 'AI',
+      label: (t('menu.item.ai') || 'AI'),
       contextMenuGroupId: 'navigation',
       contextMenuOrder: 1.5,
       run: async () => {
@@ -139,21 +189,61 @@ export class Editor {
           const sel = editor.getSelection();
           const model = editor.getModel();
           const selected = sel && model ? model.getValueInRange(sel) : '';
+          this.lastTabForModal = tab;
           const form = await this.showAiInstructionModal();
           if (!form) return;
           const instruction = form.instruction;
           const effValue = (form as any).effort as undefined | 'minimal'|'low'|'medium'|'high';
-          // Determine cwd from tab path
-          let cwd: string | undefined;
-          if (tab.path) { const parts = tab.path.split(/[/\\]/); parts.pop(); cwd = parts.join('/'); }
+          await this.runCodex(editor, tab, instruction, effValue, selected);
+        } catch (e) {
+          console.error('AI action failed:', e);
+        }
+      }
+    });
+  }
 
-          const prompt = `${instruction}\n\n--- INPUT START ---\n${selected}\n--- INPUT END ---\n\nReturn only the transformed text.`;
-          // Minimal status overlay with loader
-          const streamBox = document.createElement('div');
-          streamBox.style.position = 'fixed';
-          streamBox.style.bottom = '10px';
-          streamBox.style.right = '10px';
-          streamBox.style.display = 'flex';
+  private registerMacroActions(editor: monaco.editor.IStandaloneCodeEditor, tab: Tab) {
+    const defaultEffort = (() => {
+      try { const raw = localStorage.getItem('editrion.aiOverrides'); const saved = raw ? JSON.parse(raw) : {}; return saved.effort as any; } catch { return undefined; }
+    })();
+    for (const tpl of this.aiTemplates) {
+      const actionId = `codex.macro.${tpl.id}`;
+      if (this.macroActionIds.has(actionId)) continue;
+      editor.addAction({
+        id: actionId,
+        label: `${tpl.name}`,
+        contextMenuGroupId: 'navigation',
+        contextMenuOrder: 1.49,
+        run: async () => {
+          try {
+            const sel = editor.getSelection();
+            const model = editor.getModel();
+            const selected = sel && model ? model.getValueInRange(sel) : '';
+            const eff = tpl.effort || defaultEffort;
+            await this.runCodex(editor, tab, tpl.instruction, eff, selected);
+          } catch (e) { console.error('AI macro failed:', e); }
+        }
+      });
+      this.macroActionIds.add(actionId);
+    }
+  }
+
+  private async runCodex(editor: monaco.editor.IStandaloneCodeEditor, tab: Tab, instruction: string, effValue?: 'minimal'|'low'|'medium'|'high', selectedInput?: string) {
+    try {
+      const sel = editor.getSelection();
+      const model = editor.getModel();
+      const selected = selectedInput ?? (sel && model ? model.getValueInRange(sel) : '');
+      // Determine cwd from tab path
+      let cwd: string | undefined;
+      if (tab.path) { const parts = tab.path.split(/[/\\]/); parts.pop(); cwd = parts.join('/'); }
+
+      const prompt = `${instruction}\n\n--- INPUT START ---\n${selected}\n--- INPUT END ---\n\nReturn only the transformed text.`;
+      // Minimal status overlay with loader
+      const streamBox = document.createElement('div');
+      streamBox.style.position = 'fixed';
+      streamBox.style.bottom = '10px';
+      streamBox.style.right = '10px';
+      streamBox.style.display = 'flex';
           streamBox.style.alignItems = 'center';
           streamBox.style.gap = '8px';
           streamBox.style.padding = '8px 10px';
@@ -326,10 +416,8 @@ export class Editor {
         } catch (e) {
           console.error('AI action failed:', e);
         }
-      },
-    });
-  }
-
+      }
+  
   private async showAiInstructionModal(): Promise<{ instruction: string; effort?: string } | null> {
     // Styled modal to match previous implementation with radios under the textarea
     return new Promise(resolve => {
@@ -409,6 +497,63 @@ export class Editor {
       effWrap.append(effLabel, effRow);
       body.appendChild(effWrap);
 
+      // Inline macro save bar (hidden by default)
+      const macroBar = document.createElement('div');
+      macroBar.style.display = 'none';
+      macroBar.style.marginTop = '10px';
+      macroBar.style.paddingTop = '6px';
+      macroBar.style.borderTop = '1px solid var(--panel-border, rgba(255,255,255,0.12))';
+      const macroLabel = document.createElement('label');
+      macroLabel.textContent = t('ai.modal.promptTemplateName') || 'Template name:';
+      macroLabel.style.fontSize = '12px';
+      const macroInput = document.createElement('input');
+      macroInput.type = 'text';
+      macroInput.style.flex = '1 1 auto';
+      macroInput.style.width = '100%';
+      macroInput.style.margin = '0 8px';
+      // Make input visually match button height
+      macroInput.style.padding = '6px 10px';
+      macroInput.style.border = '1px solid var(--panel-border)';
+      macroInput.style.borderRadius = '4px';
+      macroInput.style.background = 'var(--bg)';
+      macroInput.style.color = 'var(--text)';
+      const macroBtnCancel = document.createElement('button'); macroBtnCancel.className = 'btn'; macroBtnCancel.textContent = t('button.cancel') || 'Cancel';
+      const macroBtnSave = document.createElement('button'); macroBtnSave.className = 'btn primary'; macroBtnSave.textContent = t('button.save') || 'Save';
+      const hideMacroBar = () => { macroBar.style.display = 'none'; macroInput.value = ''; };
+      const doSaveMacro = () => {
+        const name = macroInput.value.trim();
+        if (!name) { macroInput.focus(); return; }
+        const newTpl = { id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`, name, instruction: instr.value || '', effort: effValue || undefined };
+        this.aiTemplates.push(newTpl);
+        this.saveMacros();
+        if (this.currentEditor && this.lastTabForModal) {
+          this.registerMacroActions(this.currentEditor, this.lastTabForModal);
+        }
+        hideMacroBar();
+      };
+      macroBtnCancel.addEventListener('click', hideMacroBar);
+      macroBtnSave.addEventListener('click', doSaveMacro);
+      macroInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); doSaveMacro(); } if (e.key === 'Escape') { e.preventDefault(); hideMacroBar(); } });
+      const macroRow = document.createElement('div');
+      macroRow.style.display = 'flex';
+      macroRow.style.alignItems = 'center';
+      macroRow.style.gap = '8px';
+      macroRow.style.marginTop = '6px';
+      macroRow.append(macroInput, macroBtnCancel, macroBtnSave);
+      const macroWrap = document.createElement('div');
+      macroWrap.append(macroLabel, macroRow);
+      macroBar.append(macroWrap);
+      body.appendChild(macroBar);
+
+      // Save template button (shows inline bar)
+      const btnSaveTpl = document.createElement('button');
+      btnSaveTpl.className = 'btn';
+      btnSaveTpl.textContent = t('ai.modal.saveTemplate') || 'Save as Template';
+      btnSaveTpl.addEventListener('click', () => {
+        macroBar.style.display = 'block';
+        setTimeout(() => macroInput.focus(), 0);
+      });
+
       const actions = document.createElement('div');
       actions.style.display = 'flex';
       actions.style.alignItems = 'center';
@@ -457,6 +602,7 @@ export class Editor {
       });
 
       actions.appendChild(status);
+      actions.appendChild(btnSaveTpl);
       actions.appendChild(btnCancel);
       actions.appendChild(btnRun);
       box.appendChild(header);
@@ -467,6 +613,7 @@ export class Editor {
       setTimeout(() => instr.focus(), 0);
     });
   }
+
 
   private setupKeybindings(editor: monaco.editor.IStandaloneCodeEditor, tab: Tab): void {
     // Save file (Ctrl+S / Cmd+S)
