@@ -11,8 +11,9 @@ export class Editor {
   private resizeObserver?: ResizeObserver;
   public onContentChanged?: (tab: Tab, content: string) => void;
   private aiTemplates: Array<{ id: string; name: string; instruction: string; effort?: 'minimal'|'low'|'medium'|'high' }>; 
-  private macroActionIds: Set<string> = new Set();
   private lastTabForModal?: Tab;
+  // Track the last active tab to re-register macros when templates load asynchronously
+  private lastActiveTab?: Tab;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -20,9 +21,8 @@ export class Editor {
     this.aiTemplates = this.loadMacros();
     // Try loading macros from persistent config file too (works in dev/prod)
     this.tryLoadMacrosFromFile().then(() => {
-      if (this.currentEditor && this.lastTabForModal) {
-        this.registerMacroActions(this.currentEditor, this.lastTabForModal);
-      }
+      // After async load, ensure actions exist on all editors
+      this.registerMacrosOnAllEditors();
     }).catch(()=>{});
   }
 
@@ -66,17 +66,19 @@ export class Editor {
     return out.join('\n');
   }
   createEditor(tab: Tab, content: string = ''): monaco.editor.IStandaloneCodeEditor {
-    // Dispose existing editor if any
-    if (this.currentEditor) {
-      this.currentEditor.dispose();
-    }
+    // Create a dedicated DOM element per tab and keep it in the editor container (hidden by default)
+    const editorElement = document.createElement('div');
+    editorElement.id = `editor-${tab.id}`;
+    editorElement.style.width = '100%';
+    editorElement.style.height = '100%';
+    editorElement.style.display = 'none';
+    this.container.appendChild(editorElement);
 
-    // Create new editor
-    const editor = monaco.editor.create(this.container, {
+    const editor = monaco.editor.create(editorElement, {
       value: content,
       language: this.detectLanguage(tab.path),
       theme: 'vs-dark',
-      automaticLayout: false, // We'll handle resize manually
+      automaticLayout: true,
       minimap: { enabled: true },
       scrollBeyondLastLine: false,
       wordWrap: 'bounded',
@@ -102,7 +104,9 @@ export class Editor {
       }
     });
 
-    this.currentEditor = editor;
+    // Remember for macro registration when needed later
+    this.lastActiveTab = this.lastActiveTab || tab;
+    this.lastTabForModal = this.lastTabForModal || tab;
 
     // Set up editor event listeners
     this.setupEditorEvents(editor, tab);
@@ -208,7 +212,8 @@ export class Editor {
     })();
     for (const tpl of this.aiTemplates) {
       const actionId = `codex.macro.${tpl.id}`;
-      if (this.macroActionIds.has(actionId)) continue;
+      // Avoid duplicate registration per editor instance
+      if (editor.getAction(actionId)) continue;
       editor.addAction({
         id: actionId,
         label: `${tpl.name}`,
@@ -224,8 +229,16 @@ export class Editor {
           } catch (e) { console.error('AI macro failed:', e); }
         }
       });
-      this.macroActionIds.add(actionId);
     }
+  }
+
+  private registerMacrosOnAllEditors(): void {
+    try {
+      const state = tabsStore.getState();
+      for (const t of state.tabs) {
+        if (t.editor) this.registerMacroActions(t.editor, t as any);
+      }
+    } catch {}
   }
 
   private async runCodex(editor: monaco.editor.IStandaloneCodeEditor, tab: Tab, instruction: string, effValue?: 'minimal'|'low'|'medium'|'high', selectedInput?: string) {
@@ -526,9 +539,8 @@ export class Editor {
         const newTpl = { id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`, name, instruction: instr.value || '', effort: effValue || undefined };
         this.aiTemplates.push(newTpl);
         this.saveMacros();
-        if (this.currentEditor && this.lastTabForModal) {
-          this.registerMacroActions(this.currentEditor, this.lastTabForModal);
-        }
+        // Register on all existing editors so macros appear everywhere immediately
+        this.registerMacrosOnAllEditors();
         hideMacroBar();
       };
       macroBtnCancel.addEventListener('click', hideMacroBar);
@@ -653,29 +665,52 @@ export class Editor {
   switchToTab(tab: Tab): void {
     if (!tab.editor) {
       // Create editor for this tab if it doesn't exist
-      let content = '';
-      if (tab.path) {
-        // Load file content
+      // Prefer originalContent when available to avoid extra reads/flicker
+      let content = tab.originalContent || '';
+      if (!content && tab.path) {
+        // Load file content lazily if not preloaded
         this.loadFileContent(tab);
       }
       this.createEditor(tab, content);
     } else {
-      // Switch to existing editor
-      if (this.currentEditor !== tab.editor) {
-        // Hide current editor
-        if (this.currentEditor) {
-          this.container.innerHTML = '';
-        }
-        
-        // Show tab's editor
-        this.currentEditor = tab.editor;
-        this.container.appendChild(tab.editor.getDomNode()!);
-        
-        // Refresh layout
-        tab.editor.layout();
-        tab.editor.focus();
+      // Ensure editor element exists for this tab
+      const node = tab.editor.getDomNode();
+      if (!node || !node.parentElement) {
+        const el = document.getElementById(`editor-${tab.id}`);
+        if (el) el.appendChild(node!);
       }
     }
+
+    // Hide all editor elements
+    const children = Array.from(this.container.children) as HTMLElement[];
+    for (const child of children) child.style.display = 'none';
+
+    // Show active tab's editor element
+    let el = document.getElementById(`editor-${tab.id}`) as HTMLElement | null;
+    if (!el) {
+      el = document.createElement('div');
+      el.id = `editor-${tab.id}`;
+      el.style.width = '100%';
+      el.style.height = '100%';
+      el.style.display = 'none';
+      this.container.appendChild(el);
+      // If editor DOM exists, attach it
+      if (tab.editor?.getDomNode()) el.appendChild(tab.editor.getDomNode()!);
+    }
+    el.style.display = 'block';
+
+    // Update current editor ref and layout
+    if (tab.editor) {
+      this.currentEditor = tab.editor;
+      try { tab.editor.updateOptions({ minimap: { enabled: true } as any }); } catch {}
+      try { tab.editor.layout(); } catch {}
+      try { setTimeout(() => tab.editor?.layout(), 0); } catch {}
+      try { tab.editor.focus(); } catch {}
+    }
+
+    // Remember last active tab for macros
+    this.lastActiveTab = tab;
+    this.lastTabForModal = tab;
   }
 
   private async loadFileContent(tab: Tab): Promise<void> {

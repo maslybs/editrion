@@ -266,12 +266,12 @@ body {
   background-color: var(--tabbar-bg);
   border-top: 1px solid var(--button-hover-bg);
   z-index: 1000;
-  transition: transform 0.3s ease-in-out;
   box-shadow: 0 -2px 10px rgba(0,0,0,0.3);
 }
 
 .search-panel.hidden {
-  transform: translateY(100%);
+  display: none;
+  pointer-events: none;
 }
 
 .search-controls {

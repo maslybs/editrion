@@ -55,6 +55,9 @@ export class App {
     // Ensure native menu uses current locale labels
     this.updateNativeMenuLabels();
 
+    // Mark session as not yet cleanly exited (will flip on Quit)
+    try { localStorage.setItem('editrion.cleanExit', 'false'); } catch {}
+
     // Theme
     const savedTheme = localStorage.getItem('editrion.theme') || 'dark';
     const isLight = savedTheme.includes('light');
@@ -104,7 +107,23 @@ export class App {
   private async prepareDrafts() {
     try {
       this.draftsDir = await tauriApi.getDraftsDir();
-      await this.restoreDrafts();
+      // Skip restoring drafts if last session exited cleanly
+      let cleanExit = false;
+      try { cleanExit = localStorage.getItem('editrion.cleanExit') === 'true'; } catch {}
+      if (cleanExit) {
+        try { await tauriApi.clearDir(this.draftsDir); } catch {}
+      } else {
+        // Ask whether to restore if there are any draft files
+        try {
+          const entries = await tauriApi.readDir(this.draftsDir);
+          const hasDrafts = entries.some(e => !e.is_dir && e.name.endsWith('.json'));
+          if (hasDrafts) {
+            const agree = confirm(t('info.restoredDrafts') || 'Restored unsaved changes from previous session. Restore now?');
+            if (!agree) { await tauriApi.clearDir(this.draftsDir); }
+            else { await this.restoreDrafts(); }
+          }
+        } catch (e) { console.warn('Failed to inspect drafts dir', e); }
+      }
     } catch (e) { console.warn('Drafts unavailable:', e); }
   }
 
@@ -118,9 +137,8 @@ export class App {
           const raw = await tauriApi.readFile(f.path);
           const draft = JSON.parse(raw) as { id: string; name: string; path: string; content: string };
           const name = draft.name || this.basename(draft.path || '') || t('common.untitled');
-          const tab = tabsStore.createTab(name, draft.path || name, draft.content || '');
-          // create editor now
-          this.editor.createEditor(tab, draft.content || '');
+          // Create tab; editor will be lazily created on activation
+          tabsStore.createTab(name, draft.path || name, draft.content || '');
         } catch (e) { console.warn('Failed to restore draft', f.path, e); }
       }
       this.updateWelcomeState();
@@ -358,8 +376,7 @@ export class App {
   async createNewFile() {
     try {
       const tempPath = await tauriApi.createNewFile();
-      const tab = tabsStore.createTab(t('common.untitled'), tempPath, '');
-      this.editor.createEditor(tab, '');
+      tabsStore.createTab(t('common.untitled'), tempPath, '');
     } catch (e) { console.error('createNewFile failed', e); }
   }
 
@@ -379,8 +396,7 @@ export class App {
         // viewer will render on active switch
       } else {
         const content = await tauriApi.readFile(path);
-        const tab = tabsStore.createTab(name, path, content);
-        this.editor.createEditor(tab, content);
+        tabsStore.createTab(name, path, content);
       }
     } catch (e) { console.error('Failed to open file:', e); alert(t('alert.failedToOpenFile', { error: String(e) })); }
   }
@@ -424,6 +440,8 @@ export class App {
     }
     // Always attempt to remove draft file on close (avoid restoring closed tabs)
     if (this.draftsDir) { try { await tauriApi.removeFile(`${this.draftsDir}/${tab.id}.json`); } catch {} }
+    // Remove editor DOM for this tab if present
+    try { const el = document.getElementById(`editor-${tabId}`); if (el) el.remove(); } catch {}
     tabsStore.closeTab(tabId);
   }
 
@@ -445,25 +463,22 @@ export class App {
     for (const id of ids) { await this.closeTab(id); }
   }
 
-  private async askUnsavedSingle(name: string): Promise<'save' | 'discard' | 'cancel'> {
-    if (!this.confirmOverlay || !this.confirmMessageEl) return 'cancel';
-    this.confirmMessageEl.textContent = t('confirm.unsavedSingle', { name });
-    this.confirmOverlay.classList.add('show');
-    return new Promise(resolve => { this.confirmResolve = resolve; });
-  }
+  
 
   private async handleQuitRequest() {
     const dirty = tabsStore.getState().tabs.filter(t => t.isDirty);
-    if (dirty.length === 0) { await tauriApi.quitApp(); return; }
+    if (dirty.length === 0) { try { localStorage.setItem('editrion.cleanExit', 'true'); } catch {} await tauriApi.quitApp(); return; }
     const choice = await this.askUnsavedMulti(dirty.length);
     if (choice === 'cancel') return;
     if (choice === 'save') {
       for (const tab of dirty) { tabsStore.setActiveTab(tab.id); await this.saveActiveFile(); if (tab.isDirty) return; }
+      try { localStorage.setItem('editrion.cleanExit', 'true'); } catch {}
       await tauriApi.quitApp();
       return;
     }
     // discard: clear drafts dir so closed tabs are not restored next launch
     if (this.draftsDir) { try { await tauriApi.clearDir(this.draftsDir); } catch {} }
+    try { localStorage.setItem('editrion.cleanExit', 'true'); } catch {}
     await tauriApi.quitApp();
   }
 
@@ -550,6 +565,9 @@ export class App {
   private initConfirmModal() {
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
+    // Make sure it's truly inert unless explicitly shown
+    overlay.style.display = 'none';
+    overlay.style.pointerEvents = 'none';
     const modal = document.createElement('div');
     modal.className = 'modal';
     const msg = document.createElement('p');
@@ -581,7 +599,11 @@ export class App {
   }
 
   private finishConfirm(choice: 'save' | 'discard' | 'cancel') {
-    if (this.confirmOverlay) this.confirmOverlay.classList.remove('show');
+    if (this.confirmOverlay) {
+      this.confirmOverlay.classList.remove('show');
+      this.confirmOverlay.style.display = 'none';
+      this.confirmOverlay.style.pointerEvents = 'none';
+    }
     if (this.confirmResolve) this.confirmResolve(choice);
     this.confirmResolve = undefined;
   }
@@ -590,6 +612,17 @@ export class App {
     if (!this.confirmOverlay || !this.confirmMessageEl) return 'cancel';
     this.confirmMessageEl.textContent = t('confirm.unsavedMulti', { count });
     this.confirmOverlay.classList.add('show');
+    this.confirmOverlay.style.display = 'flex';
+    this.confirmOverlay.style.pointerEvents = 'auto';
+    return new Promise(resolve => { this.confirmResolve = resolve; });
+  }
+
+  private async askUnsavedSingle(name: string): Promise<'save' | 'discard' | 'cancel'> {
+    if (!this.confirmOverlay || !this.confirmMessageEl) return 'cancel';
+    this.confirmMessageEl.textContent = t('confirm.unsavedSingle', { name });
+    this.confirmOverlay.classList.add('show');
+    this.confirmOverlay.style.display = 'flex';
+    this.confirmOverlay.style.pointerEvents = 'auto';
     return new Promise(resolve => { this.confirmResolve = resolve; });
   }
 }
