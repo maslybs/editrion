@@ -6,32 +6,30 @@
   "welcome.subtitle": "Ouvrez un fichier ou ajoutez un dossier pour commencer.",
   "welcome.openFile": "Ouvrir un fichier",
   "welcome.addFolder": "Ajouter un dossier",
-
   "search.placeholder": "Rechercher...",
   "search.findAll": "Tout rechercher",
   "search.invalidRegex": "Expression régulière invalide",
   "search.matches": "{count} occurrences",
   "search.showingNote": " (affiche {count})",
-
   "context.closeOthers": "Fermer les autres",
   "context.closeRight": "Fermer les onglets à droite",
   "context.removeProject": "Supprimer le projet",
-
+  "context.close": "Fermer",
+  "context.closeAll": "Tout fermer",
+  "context.rename": "Renommer",
+  "context.revealInExplorer": "Afficher dans l’explorateur",
+  "context.copyPath": "Copier le chemin",
   "dialog.saveFile": "Enregistrer le fichier",
   "dialog.saveAs": "Enregistrer sous",
   "dialog.openFile": "Ouvrir un fichier",
   "dialog.openFolder": "Ouvrir un dossier",
-
   "prompt.enterFilePathToSave": "Entrez le chemin du fichier à enregistrer:",
   "prompt.enterFilePathToOpen": "Entrez le chemin du fichier à ouvrir:",
   "prompt.enterFolderPathToOpen": "Entrez le chemin du dossier à ouvrir:",
-
   "alert.failedToLoadCustomTheme": "Échec du chargement du thème personnalisé. Veuillez vérifier le format JSON.",
   "alert.failedToOpenFile": "Échec de l'ouverture du fichier: {error}",
-
   "common.untitled": "Sans titre",
   "ui.language": "Langue",
-
   "menu.file": "Fichier",
   "menu.edit": "Édition",
   "menu.view": "Affichage",
@@ -39,7 +37,6 @@
   "menu.settings": "Paramètres",
   "menu.language": "Langue",
   "menu.theme": "Thème",
-
   "menu.item.newFile": "Nouveau fichier",
   "menu.item.openFile": "Ouvrir un fichier...",
   "menu.item.openFolder": "Ouvrir un dossier...",
@@ -47,7 +44,6 @@
   "menu.item.saveAs": "Enregistrer sous…",
   "menu.item.closeTab": "Fermer l’onglet",
   "menu.item.quit": "Quitter Editrion (Bêta)",
-
   "menu.item.find": "Rechercher",
   "menu.item.replace": "Remplacer",
   "menu.item.selectAllOccurrences": "Sélectionner toutes les occurrences",
@@ -56,13 +52,12 @@
   "menu.item.cut": "Couper",
   "menu.item.copy": "Copier",
   "menu.item.paste": "Coller",
-
   "menu.item.theme.dark": "Sombre",
   "menu.item.theme.light": "Clair",
   "menu.item.theme.loadCustom": "Charger un thème personnalisé…",
-
   "menu.item.window.show": "Afficher la fenêtre",
-
+  "menu.item.resetSettings": "Réinitialiser tous les paramètres",
+  "menu.item.ai": "Demander à l’IA",
   "menu.item.lang.en": "English",
   "menu.item.lang.uk": "Українська",
   "menu.item.lang.es": "Español",
@@ -79,5 +74,25 @@
   "confirm.unsavedMulti": "Enregistrer les modifications dans {count} onglets avant de fermer ?",
   "button.save": "Enregistrer",
   "button.dontSave": "Ne pas enregistrer",
-  "button.cancel": "Annuler"
+  "button.cancel": "Annuler",
+  "confirm.resetSettings": "Réinitialiser tous les paramètres par défaut ?",
+  "alert.settingsResetDone": "Paramètres réinitialisés.",
+  "codex.titleTransform": "Que voulez-vous faire ?",
+  "codex.instruction.placeholder": "par ex., Traduire en",
+  "ai.modal.reasoningEffort": "Effort de raisonnement",
+  "ai.modal.reasoningEffort.minimal": "Minimal",
+  "ai.modal.reasoningEffort.low": "Faible",
+  "ai.modal.reasoningEffort.medium": "Moyen",
+  "ai.modal.reasoningEffort.high": "Élevé",
+  "ai.modal.saveTemplate": "Enregistrer comme modèle",
+  "ai.modal.promptTemplateName": "Nom du modèle :",
+  "info.templateSaved": "Modèle enregistré",
+  "ai.settings.title": "Paramètres de l’IA",
+  "common.inherit": "Hériter",
+  "button.add": "Ajouter",
+  "button.delete": "Supprimer",
+  "menu.ai": "IA",
+  "menu.ai.reasoning": "Paramètres de raisonnement",
+  "menu.ai.manageTemplates": "Gérer les modèles",
+  "ai.settings.manageTemplates": "Gérer les modèles"
 }

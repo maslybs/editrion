@@ -35,8 +35,15 @@ logs/
 # Tauri generated files
 src-tauri/gen/
 
+# Local signing/notarization helpers (keep out of public repo)
+src-tauri/Entitlements.plist
+scripts/sign-notarize-mac.sh
+
 # Cache directories
 .cache/
 
 # Claude context files (if any)
 .claude/
+
+#other
+IMPROVEMENTS_TZ.md

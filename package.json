@@ -10,7 +10,10 @@
     "ensure:icons": "node scripts/ensure-icons.cjs",
     "icons:tauri": "tauri icon src-tauri/icons/icon.png",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:build:ci": "CI=1 tauri build",
+    "dist:mac": "bash scripts/sign-notarize-mac.sh",
+    "dist:mac:fast": "SKIP_NOTARIZE=1 bash scripts/sign-notarize-mac.sh"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.4.0",
