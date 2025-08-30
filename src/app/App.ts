@@ -78,6 +78,15 @@ export class App {
       if (e.deltaY !== 0 && !e.shiftKey) { e.preventDefault(); this.tabsContainer.scrollLeft += e.deltaY; }
     }, { passive: false });
 
+    // Disable default context menu outside Monaco editor to avoid actions like Reload
+    document.addEventListener('contextmenu', (e) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.monaco-editor')) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    });
+
     // Initial state
     this.subscribeToTabs();
     this.updateWelcomeState();
@@ -170,6 +179,17 @@ export class App {
 
   private setupShortcuts() {
     document.addEventListener('keydown', (e) => {
+      // Block page reload in Tauri (Cmd/Ctrl+R, Shift+Cmd/Ctrl+R, F5)
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'r') {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      if (e.key === 'F5') {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) { e.preventDefault(); this.saveActiveFile(); return; }
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'S' || e.key === 's')) { e.preventDefault(); this.saveActiveFileAs(); return; }
       if ((e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); this.searchPanel.show(); return; }
@@ -434,6 +454,8 @@ export class App {
       await tauriApi.quitApp();
       return;
     }
+    // discard: clear drafts dir so closed tabs are not restored next launch
+    if (this.draftsDir) { try { await tauriApi.clearDir(this.draftsDir); } catch {} }
     await tauriApi.quitApp();
   }
 

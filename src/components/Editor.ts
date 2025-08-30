@@ -295,6 +295,11 @@ export class Editor {
                 }
               }
             }
+            else {
+              const err = (p.error ?? '').toString();
+              console.warn('Codex failed:', err);
+              alert('AI failed to run. Please ensure the Codex CLI is installed and available in PATH.\n\n' + err);
+            }
             try { document.body.removeChild(streamBox); } catch {}
           });
           addUnsub(() => { onDone(); });

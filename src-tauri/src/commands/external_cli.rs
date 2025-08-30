@@ -118,43 +118,40 @@ fn run_external_cli_stream(
             }
         }
 
-        if let Some(bin_path) = resolve_binary_path(cli_name) {
-            let mut cmd = Command::new(&bin_path);
+        if cfg!(target_os = "windows") {
+            // On Windows, prefer direct spawn if we can resolve the binary path.
+            if let Some(bin_path) = resolve_binary_path(cli_name) {
+                let mut cmd = Command::new(&bin_path);
+                cmd.arg("exec").arg("--skip-git-repo-check");
+                for a in &pre_flags { cmd.arg(a); }
+                cmd.arg(&prompt);
+                if let Some(ref dir) = cwd { if Path::new(dir).is_dir() { let _ = cmd.current_dir(dir); } }
+                cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+                return cmd.spawn();
+            }
+            // Fallback to using the name as-is; rely on PATH
+            let mut cmd = Command::new(cli_name);
             cmd.arg("exec").arg("--skip-git-repo-check");
-            for a in &pre_flags {
-                cmd.arg(a);
-            }
+            for a in &pre_flags { cmd.arg(a); }
             cmd.arg(&prompt);
-            if let Some(ref dir) = cwd {
-                if Path::new(dir).is_dir() {
-                    let _ = cmd.current_dir(dir);
-                }
-            }
+            if let Some(ref dir) = cwd { if Path::new(dir).is_dir() { let _ = cmd.current_dir(dir); } }
+            cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+            return cmd.spawn();
+        } else {
+            // On macOS/Linux, always run via login shell so PATH (node, brew, etc.) is loaded.
+            let flags = if pre_flags.is_empty() { String::new() } else { format!("{} ", pre_flags.join(" ")) };
+            let cmdline = format!(
+                "{} exec --skip-git-repo-check {}{}",
+                cli_name,
+                flags,
+                shell_quote(&prompt)
+            );
+            let mut cmd = Command::new("/bin/zsh");
+            cmd.arg("-lc").arg(&cmdline);
+            if let Some(ref dir) = cwd { if Path::new(dir).is_dir() { let _ = cmd.current_dir(dir); } }
             cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
             return cmd.spawn();
         }
-
-        // Fallback via login shell PATH
-        let flags = if pre_flags.is_empty() {
-            String::new()
-        } else {
-            format!("{} ", pre_flags.join(" "))
-        };
-        let cmdline = format!(
-            "{} exec --skip-git-repo-check {}{}",
-            cli_name,
-            flags,
-            shell_quote(&prompt)
-        );
-        let mut cmd = Command::new("/bin/zsh");
-        cmd.arg("-lc").arg(&cmdline);
-        if let Some(ref dir) = cwd {
-            if Path::new(dir).is_dir() {
-                let _ = cmd.current_dir(dir);
-            }
-        }
-        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
-        cmd.spawn()
     };
 
     let child = spawn().map_err(AppError::Io)?;
