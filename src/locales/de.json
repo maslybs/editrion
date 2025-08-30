@@ -62,6 +62,7 @@
   "menu.item.theme.loadCustom": "Benutzerdefiniertes laden…",
 
   "menu.item.window.show": "Fenster anzeigen",
+  "menu.item.resetSettings": "Alle Einstellungen zurücksetzen",
 
   "menu.item.lang.en": "English",
   "menu.item.lang.uk": "Українська",
@@ -81,6 +82,8 @@
   "button.save": "Speichern",
   "button.dontSave": "Nicht speichern",
   "button.cancel": "Abbrechen",
+  "confirm.resetSettings": "Alle Einstellungen auf Standard zurücksetzen?",
+  "alert.settingsResetDone": "Einstellungen wurden zurückgesetzt.",
   "codex.titleTransform": "Was möchten Sie tun?",
   "codex.instruction.placeholder": "z. B. Übersetzen in",
   "ai.modal.reasoningEffort": "Denkaufwand",

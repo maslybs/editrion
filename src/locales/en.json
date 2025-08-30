@@ -62,6 +62,7 @@
   "menu.item.theme.loadCustom": "Load Custom…",
 
   "menu.item.window.show": "Show Window",
+  "menu.item.resetSettings": "Reset All Settings",
 
   "menu.item.lang.en": "English",
   "menu.item.lang.uk": "Українська",
@@ -101,4 +102,7 @@
   "ai.modal.promptTemplateName": "Template name:"
   ,
   "info.templateSaved": "Template saved"
+  ,
+  "confirm.resetSettings": "Reset all settings to defaults?",
+  "alert.settingsResetDone": "Settings have been reset."
 }

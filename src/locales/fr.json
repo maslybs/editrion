@@ -62,6 +62,7 @@
   "menu.item.theme.loadCustom": "Charger un thème personnalisé…",
 
   "menu.item.window.show": "Afficher la fenêtre",
+  "menu.item.resetSettings": "Réinitialiser tous les paramètres",
 
   "menu.item.lang.en": "English",
   "menu.item.lang.uk": "Українська",
@@ -80,6 +81,8 @@
   "button.save": "Enregistrer",
   "button.dontSave": "Ne pas enregistrer",
   "button.cancel": "Annuler",
+  "confirm.resetSettings": "Réinitialiser tous les paramètres par défaut ?",
+  "alert.settingsResetDone": "Paramètres réinitialisés.",
   "codex.titleTransform": "Que voulez-vous faire ?",
   "codex.instruction.placeholder": "par ex., Traduire en",
   "ai.modal.reasoningEffort": "Effort de raisonnement",

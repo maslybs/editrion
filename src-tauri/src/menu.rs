@@ -121,6 +121,7 @@ pub fn build_initial_menu<R: Runtime>(app: &AppHandle<R>) -> Result<Menu<R>> {
             "menu.window" => "Window".to_string(),
             "menu.theme" => "Theme".to_string(),
             "menu.language" => "Language".to_string(),
+            "menu.item.resetSettings" => "Reset All Settings".to_string(),
             "menu.item.undo" => "Undo".to_string(),
             "menu.item.redo" => "Redo".to_string(),
             "menu.item.cut" => "Cut".to_string(),
@@ -229,12 +230,22 @@ fn build_settings_menu<R: Runtime>(
     
     let ai_settings = MenuItem::with_id(app, "ai_settings", 
         &resolver.resolve("menu.item.ai"), true, None::<&str>)?;
+
+    let reset_settings = MenuItem::with_id(
+        app,
+        "reset_settings",
+        &resolver.resolve("menu.item.resetSettings"),
+        true,
+        None::<&str>,
+    )?;
     
     let settings_label = resolver.resolve("menu.settings");
     Submenu::with_items(app, &settings_label, true, &[
         &language_submenu,
         &PredefinedMenuItem::separator(app)?,
         &ai_settings,
+        &PredefinedMenuItem::separator(app)?,
+        &reset_settings,
     ]).map_err(Into::into)
 }
 
