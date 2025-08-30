@@ -55,8 +55,7 @@ export class App {
     // Ensure native menu uses current locale labels
     this.updateNativeMenuLabels();
 
-    // Mark session as not yet cleanly exited (will flip on Quit)
-    try { localStorage.setItem('editrion.cleanExit', 'false'); } catch {}
+    // Do not overwrite clean-exit flag on startup; we check it in prepareDrafts()
 
     // Theme
     const savedTheme = localStorage.getItem('editrion.theme') || 'dark';
@@ -337,6 +336,7 @@ export class App {
         case 'language_de': setLocale('de'); applyTranslations(); await this.updateNativeMenuLabels(); break;
         case 'ai_open_config': await this.openAiConfig(); break;
         case 'ai_settings': await this.openAiDefaultsModal(); break;
+        case 'ai_manage_templates': this.openAiMacrosManager(); break;
         case 'ai_model_o3': this.setAiOverrideModel('o3'); break;
         case 'ai_model_gpt5': this.setAiOverrideModel('gpt-5'); break;
         case 'ai_reasoning_effort_minimal': this.setAiOverrideEffort('minimal'); break;
@@ -368,6 +368,8 @@ export class App {
       'menu.item.theme.dark': t('menu.item.theme.dark'), 'menu.item.theme.light': t('menu.item.theme.light'), 'menu.item.theme.loadCustom': t('menu.item.theme.loadCustom'),
       'menu.item.window.show': t('menu.item.window.show'), 'menu.item.lang.en': t('menu.item.lang.en'), 'menu.item.lang.uk': t('menu.item.lang.uk'), 'menu.item.lang.es': t('menu.item.lang.es'), 'menu.item.lang.fr': t('menu.item.lang.fr'), 'menu.item.lang.ja': t('menu.item.lang.ja'), 'menu.item.lang.de': t('menu.item.lang.de'),
       'menu.item.resetSettings': t('menu.item.resetSettings'),
+      'menu.ai': t('menu.ai') || 'AI', 'menu.ai.reasoning': t('menu.ai.reasoning') || 'Reasoning Settings', 'menu.ai.manageTemplates': t('menu.ai.manageTemplates') || 'Manage Templates',
+      'menu.item.ai': t('menu.item.ai') || 'AI',
     } as Record<string,string>;
     try { await tauriApi.rebuildMenu(labels); } catch (e) { console.warn('Failed to rebuild native menu:', e); }
   }
@@ -448,6 +450,8 @@ export class App {
   async closeAllTabs() {
     const ids = tabsStore.getState().tabs.map(t => t.id);
     for (const id of ids) { await this.closeTab(id); }
+    // Ensure drafts dir is cleared so nothing is restored next launch
+    if (this.draftsDir) { try { await tauriApi.clearDir(this.draftsDir); } catch {} }
   }
 
   async closeOtherTabs(keepId: string) {
@@ -624,5 +628,82 @@ export class App {
     this.confirmOverlay.style.display = 'flex';
     this.confirmOverlay.style.pointerEvents = 'auto';
     return new Promise(resolve => { this.confirmResolve = resolve; });
+  }
+
+
+  // Macros manager modal: edit, sort, delete macros
+  private openAiMacrosManager() {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay show';
+    const modal = document.createElement('div'); modal.className = 'modal';
+    const title = document.createElement('h3'); title.textContent = t('ai.settings.manageTemplates') || 'Manage Templates';
+    const body = document.createElement('div'); body.style.maxHeight = '60vh'; body.style.overflow = 'auto'; body.style.marginTop = '8px';
+
+    // Load current macros via Editor API or localStorage fallback
+    let macros: Array<{ id?: string; name: string; instruction: string; effort?: any }> = [];
+    try { macros = this.editor.getMacros(); } catch { try { const raw = localStorage.getItem('editrion.aiTemplates'); macros = raw ? JSON.parse(raw) : []; } catch {} }
+    if (!Array.isArray(macros)) macros = [];
+
+    const list = document.createElement('div'); list.style.display = 'flex'; list.style.flexDirection = 'column'; list.style.gap = '10px';
+
+    const efforts: Array<''|'minimal'|'low'|'medium'|'high'> = ['', 'minimal','low','medium','high'];
+
+    const renderItem = (m: any) => {
+      const card = document.createElement('div');
+      card.style.border = '1px solid var(--panel-border)';
+      card.style.borderRadius = '6px';
+      card.style.padding = '10px';
+      card.style.background = 'var(--panel-bg)';
+      const row1 = document.createElement('div'); row1.style.display = 'flex'; row1.style.gap = '8px'; row1.style.alignItems = 'center';
+      const name = document.createElement('input'); name.type = 'text'; name.value = m.name || ''; name.placeholder = 'Name'; name.style.flex = '1 1 auto';
+      const effort = document.createElement('select');
+      for (const v of efforts) { const opt = document.createElement('option'); opt.value = v; opt.textContent = v ? v : (t('common.inherit') || 'Inherit'); effort.appendChild(opt); }
+      effort.value = m.effort || '';
+      const btnUp = document.createElement('button'); btnUp.className = 'btn'; btnUp.textContent = '↑';
+      const btnDown = document.createElement('button'); btnDown.className = 'btn'; btnDown.textContent = '↓';
+      const btnDel = document.createElement('button'); btnDel.className = 'btn'; btnDel.textContent = t('button.delete') || 'Delete';
+      row1.append(name, effort, btnUp, btnDown, btnDel);
+      const instr = document.createElement('textarea'); instr.value = m.instruction || ''; instr.style.width = '100%'; instr.style.height = '100px'; instr.style.marginTop = '8px';
+      card.append(row1, instr);
+
+      // Bind
+      name.addEventListener('input', () => { m.name = name.value; });
+      effort.addEventListener('change', () => { m.effort = effort.value || undefined; });
+      instr.addEventListener('input', () => { m.instruction = instr.value; });
+      btnDel.addEventListener('click', () => { const i = macros.indexOf(m); if (i >= 0) { macros.splice(i,1); list.removeChild(card); } });
+      btnUp.addEventListener('click', () => { const i = macros.indexOf(m); if (i > 0) { const [it] = macros.splice(i,1); macros.splice(i-1,0,it); list.insertBefore(card, list.children[i-1]); } });
+      btnDown.addEventListener('click', () => { const i = macros.indexOf(m); if (i >= 0 && i < macros.length-1) { const [it] = macros.splice(i,1); macros.splice(i+1,0,it); list.insertBefore(card, list.children[i+1]); } });
+
+      return card;
+    };
+
+    macros.forEach(m => list.appendChild(renderItem(m)));
+
+    const actions = document.createElement('div'); actions.className = 'actions'; actions.style.marginTop = '10px';
+    const btnAdd = document.createElement('button'); btnAdd.className = 'btn'; btnAdd.textContent = t('button.add') || 'Add';
+    const btnCancel2 = document.createElement('button'); btnCancel2.className = 'btn'; btnCancel2.textContent = t('button.cancel') || 'Cancel';
+    const btnSave2 = document.createElement('button'); btnSave2.className = 'btn primary'; btnSave2.textContent = t('button.save') || 'Save';
+    actions.append(btnAdd, btnCancel2, btnSave2);
+
+    btnAdd.addEventListener('click', () => {
+      const m: any = { name: 'New Macro', instruction: '', effort: '' };
+      macros.push(m);
+      list.appendChild(renderItem(m));
+    });
+
+    const cleanup = () => { overlay.remove(); };
+    btnCancel2.addEventListener('click', cleanup);
+    btnSave2.addEventListener('click', () => {
+      try { this.editor.setMacros(macros as any); } catch {
+        try { localStorage.setItem('editrion.aiTemplates', JSON.stringify(macros)); } catch {}
+      }
+      cleanup();
+    });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(); });
+
+    body.appendChild(list);
+    modal.append(title, body, actions);
+    overlay.append(modal);
+    document.body.append(overlay);
   }
 }

@@ -137,6 +137,24 @@ export class Editor {
     this.trySaveMacrosToFile().catch(()=>{});
   }
 
+  // Public API: return a shallow copy of macros
+  public getMacros(): Array<{ id: string; name: string; instruction: string; effort?: any }> {
+    return (this.aiTemplates || []).map(m => ({ ...m }));
+  }
+
+  // Public API: replace macros, persist and re-register on all editors
+  public setMacros(macros: Array<{ id?: string; name: string; instruction: string; effort?: any }>): void {
+    const normalized = (macros || []).map(m => ({
+      id: m.id || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`,
+      name: String(m.name || '').trim(),
+      instruction: String(m.instruction || ''),
+      effort: m.effort || undefined,
+    }));
+    this.aiTemplates = normalized;
+    this.saveMacros();
+    this.registerMacrosOnAllEditors();
+  }
+
   private async tryLoadMacrosFromFile(): Promise<void> {
     try {
       const cfgPath = await tauriApi.getCodexConfigPath();

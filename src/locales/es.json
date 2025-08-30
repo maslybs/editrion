@@ -6,13 +6,11 @@
   "welcome.subtitle": "Abre un archivo o añade una carpeta para empezar.",
   "welcome.openFile": "Abrir archivo",
   "welcome.addFolder": "Añadir carpeta",
-
   "search.placeholder": "Buscar...",
   "search.findAll": "Buscar todo",
   "search.invalidRegex": "Expresión regular no válida",
   "search.matches": "{count} coincidencias",
   "search.showingNote": " (mostrando {count})",
-
   "context.closeOthers": "Cerrar otras",
   "context.closeRight": "Cerrar pestañas a la derecha",
   "context.removeProject": "Eliminar proyecto",
@@ -21,22 +19,17 @@
   "context.rename": "Renombrar",
   "context.revealInExplorer": "Mostrar en el explorador",
   "context.copyPath": "Copiar ruta",
-
   "dialog.saveFile": "Guardar archivo",
   "dialog.saveAs": "Guardar como",
   "dialog.openFile": "Abrir archivo",
   "dialog.openFolder": "Abrir carpeta",
-
   "prompt.enterFilePathToSave": "Introduce la ruta del archivo para guardar:",
   "prompt.enterFilePathToOpen": "Introduce la ruta del archivo para abrir:",
   "prompt.enterFolderPathToOpen": "Introduce la ruta de la carpeta para abrir:",
-
   "alert.failedToLoadCustomTheme": "No se pudo cargar el tema. Verifique el formato JSON.",
   "alert.failedToOpenFile": "No se pudo abrir el archivo: {error}",
-
   "common.untitled": "Sin título",
   "ui.language": "Idioma",
-
   "menu.file": "Archivo",
   "menu.edit": "Editar",
   "menu.view": "Ver",
@@ -44,7 +37,6 @@
   "menu.settings": "Configuración",
   "menu.language": "Idioma",
   "menu.theme": "Tema",
-
   "menu.item.newFile": "Nuevo archivo",
   "menu.item.openFile": "Abrir archivo...",
   "menu.item.openFolder": "Abrir carpeta...",
@@ -52,7 +44,6 @@
   "menu.item.saveAs": "Guardar como…",
   "menu.item.closeTab": "Cerrar pestaña",
   "menu.item.quit": "Salir de Editrion (Beta)",
-
   "menu.item.find": "Buscar",
   "menu.item.replace": "Reemplazar",
   "menu.item.selectAllOccurrences": "Seleccionar todas las apariciones",
@@ -61,16 +52,12 @@
   "menu.item.cut": "Cortar",
   "menu.item.copy": "Copiar",
   "menu.item.paste": "Pegar",
-
   "menu.item.theme.dark": "Oscuro",
   "menu.item.theme.light": "Claro",
   "menu.item.theme.loadCustom": "Cargar personalizado…",
-
   "menu.item.window.show": "Mostrar ventana",
   "menu.item.resetSettings": "Restablecer todos los ajustes",
   "menu.item.ai": "Preguntar a la IA",
-  "menu.item.resetSettings": "Restablecer todos los ajustes",
-
   "menu.item.lang.en": "English",
   "menu.item.lang.uk": "Українська",
   "menu.item.lang.es": "Español",
@@ -98,9 +85,14 @@
   "ai.modal.reasoningEffort.medium": "Medio",
   "ai.modal.reasoningEffort.high": "Alto",
   "ai.modal.saveTemplate": "Guardar como plantilla",
-  "ai.modal.promptTemplateName": "Nombre de la plantilla:"
-  ,
-  "info.templateSaved": "Plantilla guardada"
-  ,
-  "ai.settings.title": "Configuración de AI"
+  "ai.modal.promptTemplateName": "Nombre de la plantilla:",
+  "info.templateSaved": "Plantilla guardada",
+  "ai.settings.title": "Configuración de AI",
+  "common.inherit": "Heredar",
+  "button.add": "Añadir",
+  "button.delete": "Eliminar",
+  "menu.ai": "IA",
+  "menu.ai.reasoning": "Configuración de razonamiento",
+  "menu.ai.manageTemplates": "Gestionar plantillas",
+  "ai.settings.manageTemplates": "Gestionar plantillas"
 }

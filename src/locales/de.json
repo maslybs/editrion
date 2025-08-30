@@ -6,13 +6,11 @@
   "welcome.subtitle": "Öffne eine Datei oder füge einen Ordner hinzu, um zu starten.",
   "welcome.openFile": "Datei öffnen",
   "welcome.addFolder": "Ordner hinzufügen",
-
   "search.placeholder": "Suchen...",
   "search.findAll": "Alle suchen",
   "search.invalidRegex": "Ungültiger regulärer Ausdruck",
   "search.matches": "{count} Treffer",
   "search.showingNote": " (zeige {count})",
-
   "context.closeOthers": "Andere schließen",
   "context.closeRight": "Tabs rechts schließen",
   "context.removeProject": "Projekt entfernen",
@@ -21,22 +19,17 @@
   "context.rename": "Umbenennen",
   "context.revealInExplorer": "Im Explorer anzeigen",
   "context.copyPath": "Pfad kopieren",
-
   "dialog.saveFile": "Datei speichern",
   "dialog.saveAs": "Speichern unter",
   "dialog.openFile": "Datei öffnen",
   "dialog.openFolder": "Ordner öffnen",
-
   "prompt.enterFilePathToSave": "Dateipfad zum Speichern eingeben:",
   "prompt.enterFilePathToOpen": "Dateipfad zum Öffnen eingeben:",
   "prompt.enterFolderPathToOpen": "Ordnerpfad zum Öffnen eingeben:",
-
   "alert.failedToLoadCustomTheme": "Benutzerdefiniertes Theme konnte nicht geladen werden. Bitte JSON-Format prüfen.",
   "alert.failedToOpenFile": "Datei konnte nicht geöffnet werden: {error}",
-
   "common.untitled": "Ohne Titel",
   "ui.language": "Sprache",
-
   "menu.file": "Datei",
   "menu.edit": "Bearbeiten",
   "menu.view": "Ansicht",
@@ -44,7 +37,6 @@
   "menu.settings": "Einstellungen",
   "menu.language": "Sprache",
   "menu.theme": "Theme",
-
   "menu.item.newFile": "Neue Datei",
   "menu.item.openFile": "Datei öffnen...",
   "menu.item.openFolder": "Ordner öffnen...",
@@ -52,7 +44,6 @@
   "menu.item.saveAs": "Speichern unter…",
   "menu.item.closeTab": "Tab schließen",
   "menu.item.quit": "Editrion (Beta) beenden",
-
   "menu.item.find": "Suchen",
   "menu.item.replace": "Ersetzen",
   "menu.item.selectAllOccurrences": "Alle Vorkommen auswählen",
@@ -61,22 +52,18 @@
   "menu.item.cut": "Ausschneiden",
   "menu.item.copy": "Kopieren",
   "menu.item.paste": "Einfügen",
-
   "menu.item.theme.dark": "Dunkel",
   "menu.item.theme.light": "Hell",
   "menu.item.theme.loadCustom": "Benutzerdefiniertes laden…",
-
   "menu.item.window.show": "Fenster anzeigen",
   "menu.item.resetSettings": "Alle Einstellungen zurücksetzen",
   "menu.item.ai": "KI fragen",
-
   "menu.item.lang.en": "English",
   "menu.item.lang.uk": "Українська",
   "menu.item.lang.es": "Español",
   "menu.item.lang.fr": "Français",
   "menu.item.lang.ja": "日本語",
-  "menu.item.lang.de": "Deutsch"
-  ,
+  "menu.item.lang.de": "Deutsch",
   "confirm.deleteDraftsOnQuit": "Alle ungespeicherten Entwürfe löschen und beenden?",
   "info.restoredDrafts": "Ungespeicherte Änderungen aus der letzten Sitzung wurden wiederhergestellt.",
   "confirm.saveFile": "Änderungen in dieser Datei speichern?",
@@ -98,9 +85,14 @@
   "ai.modal.reasoningEffort.medium": "Mittel",
   "ai.modal.reasoningEffort.high": "Hoch",
   "ai.modal.saveTemplate": "Als Vorlage speichern",
-  "ai.modal.promptTemplateName": "Name der Vorlage:"
-  ,
-  "info.templateSaved": "Vorlage gespeichert"
-  ,
-  "ai.settings.title": "AI-Einstellungen"
+  "ai.modal.promptTemplateName": "Name der Vorlage:",
+  "info.templateSaved": "Vorlage gespeichert",
+  "ai.settings.title": "AI-Einstellungen",
+  "common.inherit": "Vererben",
+  "button.add": "Hinzufügen",
+  "button.delete": "Löschen",
+  "menu.ai": "KI",
+  "menu.ai.reasoning": "Einstellungen für Reasoning",
+  "menu.ai.manageTemplates": "Vorlagen verwalten",
+  "ai.settings.manageTemplates": "Vorlagen verwalten"
 }

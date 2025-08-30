@@ -7,13 +7,11 @@
   "welcome.hintNewFile": "Or press Cmd+N to create a new file.",
   "welcome.openFile": "Open File",
   "welcome.addFolder": "Add Folder",
-
   "search.placeholder": "Find...",
   "search.findAll": "Find All",
   "search.invalidRegex": "Invalid regex",
   "search.matches": "{count} matches",
   "search.showingNote": " (showing {count})",
-
   "context.closeOthers": "Close Others",
   "context.closeRight": "Close Tabs to the Right",
   "context.removeProject": "Remove Project",
@@ -22,22 +20,17 @@
   "context.rename": "Rename",
   "context.revealInExplorer": "Show in Explorer",
   "context.copyPath": "Copy Path",
-
   "dialog.saveFile": "Save File",
   "dialog.saveAs": "Save As",
   "dialog.openFile": "Open File",
   "dialog.openFolder": "Open Folder",
-
   "prompt.enterFilePathToSave": "Enter file path to save:",
   "prompt.enterFilePathToOpen": "Enter file path to open:",
   "prompt.enterFolderPathToOpen": "Enter folder path to open:",
-
   "alert.failedToLoadCustomTheme": "Failed to load custom theme. Please check JSON format.",
   "alert.failedToOpenFile": "Failed to open file: {error}",
-
   "common.untitled": "Untitled",
   "ui.language": "Language",
-
   "menu.file": "File",
   "menu.edit": "Edit",
   "menu.view": "View",
@@ -45,7 +38,6 @@
   "menu.settings": "Settings",
   "menu.language": "Language",
   "menu.theme": "Theme",
-
   "menu.item.newFile": "New File",
   "menu.item.openFile": "Open File...",
   "menu.item.openFolder": "Open Folder...",
@@ -53,7 +45,6 @@
   "menu.item.saveAs": "Save As…",
   "menu.item.closeTab": "Close Tab",
   "menu.item.quit": "Quit Editrion (Beta)",
-
   "menu.item.find": "Find",
   "menu.item.replace": "Replace",
   "menu.item.selectAllOccurrences": "Select All Occurrences",
@@ -62,22 +53,18 @@
   "menu.item.cut": "Cut",
   "menu.item.copy": "Copy",
   "menu.item.paste": "Paste",
-
   "menu.item.theme.dark": "Dark",
   "menu.item.theme.light": "Light",
   "menu.item.theme.loadCustom": "Load Custom…",
-
   "menu.item.window.show": "Show Window",
   "menu.item.resetSettings": "Reset All Settings",
   "menu.item.ai": "Ask AI",
-
   "menu.item.lang.en": "English",
   "menu.item.lang.uk": "Українська",
   "menu.item.lang.es": "Español",
   "menu.item.lang.fr": "Français",
   "menu.item.lang.ja": "日本語",
-  "menu.item.lang.de": "Deutsch"
-  ,
+  "menu.item.lang.de": "Deutsch",
   "confirm.deleteDraftsOnQuit": "Delete all unsaved drafts and quit?",
   "info.restoredDrafts": "Restored unsaved changes from previous session.",
   "confirm.saveFile": "Save changes to this file?",
@@ -88,30 +75,27 @@
   "confirm.unsavedMulti": "Save changes in {count} tabs before closing?",
   "button.save": "Save",
   "button.dontSave": "Don't Save",
-  "button.cancel": "Cancel"
-  ,
- 
-  "status.runningCodex": "Running AI…"
-  ,
- 
-  "button.run": "Run"
-  ,
- 
+  "button.cancel": "Cancel",
+  "status.runningCodex": "Running AI…",
+  "button.run": "Run",
   "codex.titleTransform": "What do you want to do?",
-  "codex.instruction.placeholder": "e.g., Translate to"
-  ,
+  "codex.instruction.placeholder": "e.g., Translate to",
   "ai.modal.reasoningEffort": "Reasoning Effort",
   "ai.modal.reasoningEffort.minimal": "Minimal",
   "ai.modal.reasoningEffort.low": "Low",
   "ai.modal.reasoningEffort.medium": "Medium",
   "ai.modal.reasoningEffort.high": "High",
   "ai.modal.saveTemplate": "Save as Template",
-  "ai.modal.promptTemplateName": "Template name:"
-  ,
-  "info.templateSaved": "Template saved"
-  ,
+  "ai.modal.promptTemplateName": "Template name:",
+  "info.templateSaved": "Template saved",
   "confirm.resetSettings": "Reset all settings to defaults?",
-  "alert.settingsResetDone": "Settings have been reset."
-  ,
-  "ai.settings.title": "AI Settings"
+  "alert.settingsResetDone": "Settings have been reset.",
+  "ai.settings.title": "AI Settings",
+  "common.inherit": "Inherit",
+  "button.add": "Add",
+  "button.delete": "Delete",
+  "menu.ai": "AI",
+  "menu.ai.reasoning": "Reasoning Settings",
+  "menu.ai.manageTemplates": "Manage Templates",
+  "ai.settings.manageTemplates": "Manage Templates"
 }

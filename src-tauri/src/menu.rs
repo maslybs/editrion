@@ -118,6 +118,9 @@ pub fn build_initial_menu<R: Runtime>(app: &AppHandle<R>) -> Result<Menu<R>> {
             "menu.edit" => "Edit".to_string(),
             "menu.view" => "View".to_string(),
             "menu.settings" => "Settings".to_string(),
+            "menu.ai" => "AI".to_string(),
+            "menu.ai.reasoning" => "Reasoning Settings".to_string(),
+            "menu.ai.manageTemplates" => "Manage Templates".to_string(),
             "menu.window" => "Window".to_string(),
             "menu.theme" => "Theme".to_string(),
             "menu.language" => "Language".to_string(),
@@ -152,9 +155,10 @@ fn build_menu_with_resolver<R: Runtime>(
     let view_menu = build_view_menu(app, resolver)?;
     let settings_menu = build_settings_menu(app, resolver)?;
     let window_menu = build_window_menu(app, resolver)?;
+    let ai_menu = build_ai_menu(app, resolver)?;
 
     // Create main menu
-    Menu::with_items(app, &[&file_menu, &edit_menu, &view_menu, &settings_menu, &window_menu])
+    Menu::with_items(app, &[&file_menu, &edit_menu, &view_menu, &ai_menu, &settings_menu, &window_menu])
         .map_err(Into::into)
 }
 
@@ -227,9 +231,6 @@ fn build_settings_menu<R: Runtime>(
     
     let language_refs: Vec<&dyn tauri::menu::IsMenuItem<R>> = language_items.iter().map(|item| item as &dyn tauri::menu::IsMenuItem<R>).collect();
     let language_submenu = Submenu::with_items(app, &language_label, true, language_refs.as_slice())?;
-    
-    let ai_settings = MenuItem::with_id(app, "ai_settings", 
-        &resolver.resolve("menu.item.ai"), true, None::<&str>)?;
 
     let reset_settings = MenuItem::with_id(
         app,
@@ -240,13 +241,7 @@ fn build_settings_menu<R: Runtime>(
     )?;
     
     let settings_label = resolver.resolve("menu.settings");
-    Submenu::with_items(app, &settings_label, true, &[
-        &language_submenu,
-        &PredefinedMenuItem::separator(app)?,
-        &ai_settings,
-        &PredefinedMenuItem::separator(app)?,
-        &reset_settings,
-    ]).map_err(Into::into)
+    Submenu::with_items(app, &settings_label, true, &[&language_submenu, &PredefinedMenuItem::separator(app)?, &reset_settings]).map_err(Into::into)
 }
 
 fn build_window_menu<R: Runtime>(
@@ -284,4 +279,11 @@ pub fn rebuild_menu(app: AppHandle, labels: HashMap<String, String>) -> Result<(
     let menu = build_menu_with_resolver(&app, &resolver)?;
     app.set_menu(menu)?;
     Ok(())
+}
+
+fn build_ai_menu<R: Runtime>(app: &AppHandle<R>, resolver: &impl LabelResolver) -> Result<Submenu<R>> {
+    let reasoning = MenuItem::with_id(app, "ai_settings", &resolver.resolve("menu.ai.reasoning"), true, None::<&str>)?;
+    let manage = MenuItem::with_id(app, "ai_manage_templates", &resolver.resolve("menu.ai.manageTemplates"), true, None::<&str>)?;
+    let ai_label = resolver.resolve("menu.ai");
+    Submenu::with_items(app, &ai_label, true, &[&reasoning, &manage]).map_err(Into::into)
 }

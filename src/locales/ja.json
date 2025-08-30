@@ -6,13 +6,11 @@
   "welcome.subtitle": "開始するには、ファイルを開くかフォルダを追加してください。",
   "welcome.openFile": "ファイルを開く",
   "welcome.addFolder": "フォルダを追加",
-
   "search.placeholder": "検索...",
   "search.findAll": "すべて検索",
   "search.invalidRegex": "無効な正規表現",
   "search.matches": "{count} 件の一致",
   "search.showingNote": "（{count} 件を表示）",
-
   "context.closeOthers": "他を閉じる",
   "context.closeRight": "右側のタブを閉じる",
   "context.removeProject": "プロジェクトを削除",
@@ -21,22 +19,17 @@
   "context.rename": "名前を変更",
   "context.revealInExplorer": "エクスプローラーで表示",
   "context.copyPath": "パスをコピー",
-
   "dialog.saveFile": "ファイルを保存",
   "dialog.saveAs": "名前を付けて保存",
   "dialog.openFile": "ファイルを開く",
   "dialog.openFolder": "フォルダを開く",
-
   "prompt.enterFilePathToSave": "保存するファイルパスを入力してください:",
   "prompt.enterFilePathToOpen": "開くファイルのパスを入力してください:",
   "prompt.enterFolderPathToOpen": "開くフォルダのパスを入力してください:",
-
   "alert.failedToLoadCustomTheme": "カスタムテーマを読み込めませんでした。JSON の形式を確認してください。",
   "alert.failedToOpenFile": "ファイルを開けませんでした: {error}",
-
   "common.untitled": "無題",
   "ui.language": "言語",
-
   "menu.file": "ファイル",
   "menu.edit": "編集",
   "menu.view": "表示",
@@ -44,7 +37,6 @@
   "menu.settings": "設定",
   "menu.language": "言語",
   "menu.theme": "テーマ",
-
   "menu.item.newFile": "新規ファイル",
   "menu.item.openFile": "ファイルを開く...",
   "menu.item.openFolder": "フォルダを開く...",
@@ -52,7 +44,6 @@
   "menu.item.saveAs": "名前を付けて保存…",
   "menu.item.closeTab": "タブを閉じる",
   "menu.item.quit": "Editrion（ベータ）を終了",
-
   "menu.item.find": "検索",
   "menu.item.replace": "置換",
   "menu.item.selectAllOccurrences": "すべての出現箇所を選択",
@@ -61,16 +52,12 @@
   "menu.item.cut": "切り取り",
   "menu.item.copy": "コピー",
   "menu.item.paste": "貼り付け",
-
   "menu.item.theme.dark": "ダーク",
   "menu.item.theme.light": "ライト",
   "menu.item.theme.loadCustom": "カスタムを読み込む…",
-
   "menu.item.window.show": "ウィンドウを表示",
   "menu.item.resetSettings": "すべての設定をリセット",
   "menu.item.ai": "AI に聞く",
-  "menu.item.resetSettings": "すべての設定をリセット",
-
   "menu.item.lang.en": "English",
   "menu.item.lang.uk": "Українська",
   "menu.item.lang.es": "Español",
@@ -98,9 +85,14 @@
   "ai.modal.reasoningEffort.medium": "中",
   "ai.modal.reasoningEffort.high": "高",
   "ai.modal.saveTemplate": "テンプレートとして保存",
-  "ai.modal.promptTemplateName": "テンプレート名:"
-  ,
-  "info.templateSaved": "テンプレートを保存しました"
-  ,
-  "ai.settings.title": "AI 設定"
+  "ai.modal.promptTemplateName": "テンプレート名:",
+  "info.templateSaved": "テンプレートを保存しました",
+  "ai.settings.title": "AI 設定",
+  "common.inherit": "継承",
+  "button.add": "追加",
+  "button.delete": "削除",
+  "menu.ai": "AI",
+  "menu.ai.reasoning": "推論の設定",
+  "menu.ai.manageTemplates": "テンプレートを管理",
+  "ai.settings.manageTemplates": "テンプレートを管理"
 }
