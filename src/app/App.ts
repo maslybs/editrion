@@ -137,7 +137,8 @@ export class App {
           const draft = JSON.parse(raw) as { id: string; name: string; path: string; content: string };
           const name = draft.name || this.basename(draft.path || '') || t('common.untitled');
           // Create tab; editor will be lazily created on activation
-          tabsStore.createTab(name, draft.path || name, draft.content || '');
+          // If the draft has no real path, keep it empty so Save prompts for location
+          tabsStore.createTab(name, draft.path || '', draft.content || '');
         } catch (e) { console.warn('Failed to restore draft', f.path, e); }
       }
       this.updateWelcomeState();
@@ -220,8 +221,9 @@ export class App {
         e.stopPropagation();
         return;
       }
-      if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) { e.preventDefault(); this.saveActiveFile(); return; }
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'S' || e.key === 's')) { e.preventDefault(); this.saveActiveFileAs(); return; }
+      // Save As must be matched before Save so Shift+Ctrl/Cmd+S works correctly
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); e.stopPropagation(); this.saveActiveFileAs(); return; }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); e.stopPropagation(); this.saveActiveFile(); return; }
       if ((e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); this.searchPanel.show(); return; }
       // Multi-cursor: add selection to next match (Ctrl/Cmd + D)
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'd') {
@@ -383,8 +385,11 @@ export class App {
   // ---------- File operations ----------
   async createNewFile() {
     try {
-      const tempPath = await tauriApi.createNewFile();
-      tabsStore.createTab(t('common.untitled'), tempPath, '');
+      const tempName = await tauriApi.createNewFile();
+      const base = tempName || t('common.untitled');
+      const name = /\.[^\/\\]+$/.test(base) ? base : `${base}.txt`;
+      // Keep path empty for a new unsaved tab; Save will prompt
+      tabsStore.createTab(name, '', '');
     } catch (e) { console.error('createNewFile failed', e); }
   }
 
@@ -414,7 +419,8 @@ export class App {
     try {
       let filePath = tab.path;
       if (!filePath) {
-        const saved = await tauriApi.saveFileDialog(tab.name || t('common.untitled')); if (!saved) return;
+        const defaultName = (tab.name && /\.[^\/\\]+$/.test(tab.name)) ? tab.name : `${tab.name || t('common.untitled')}.txt`;
+        const saved = await tauriApi.saveFileDialog(defaultName); if (!saved) return;
         const hasExt = /\.[^\/\\]+$/.test(saved); filePath = hasExt ? saved : `${saved}.txt`;
         tab.path = filePath; tabsStore.updateTab(tab.id, { path: filePath, name: this.basename(filePath) });
       }
@@ -428,7 +434,8 @@ export class App {
   async saveActiveFileAs() {
     const tab = tabsStore.getActiveTab(); if (!tab || !tab.editor) return;
     try {
-      const saved = await tauriApi.saveFileDialog(tab.name || t('common.untitled')); if (!saved) return;
+      const defaultName = (tab.name && /\.[^\/\\]+$/.test(tab.name)) ? tab.name : `${tab.name || t('common.untitled')}.txt`;
+      const saved = await tauriApi.saveFileDialog(defaultName); if (!saved) return;
       const filePath = saved;
       const content = tab.editor.getValue();
       await tauriApi.writeFile(filePath, content);

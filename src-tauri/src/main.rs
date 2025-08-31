@@ -9,6 +9,7 @@ mod error;
 mod menu;
 
 use app_state::AppState;
+#[cfg(target_os = "macos")]
 use tauri::Manager;
 #[cfg(not(target_os = "macos"))]
 use tauri::Emitter;

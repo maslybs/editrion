@@ -39,6 +39,7 @@ src-tauri/gen/
 src-tauri/Entitlements.plist
 scripts/sign-notarize-mac.sh
 /scripts
+/releases
 
 # Cache directories
 .cache/
