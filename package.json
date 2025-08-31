@@ -13,7 +13,11 @@
     "tauri": "tauri",
     "tauri:build:ci": "CI=1 tauri build",
     "dist:mac": "bash scripts/sign-notarize-mac.sh",
-    "dist:mac:fast": "SKIP_NOTARIZE=1 bash scripts/sign-notarize-mac.sh"
+    "dist:mac:fast": "SKIP_NOTARIZE=1 bash scripts/sign-notarize-mac.sh",
+    "notarize:submit": "bash scripts/notary-submit.sh",
+    "notarize:finalize": "bash scripts/notary-finalize.sh",
+    "tauri:build:mac": "CI=true tauri build",
+    "tauri:build:mac:app": "CI=true tauri build --bundles app"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.4.0",
