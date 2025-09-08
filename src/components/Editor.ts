@@ -6,6 +6,7 @@ import { appStore } from '../store/appStore';
 import { tauriApi } from '../services/tauriApi';
 import { t } from '../services/i18n';
 import { listen } from '@tauri-apps/api/event';
+import { getShortcuts, toMonacoKeyChord } from '../services/shortcuts';
 
 export class Editor {
   private container: HTMLElement;
@@ -656,31 +657,70 @@ export class Editor {
 
 
   private setupKeybindings(editor: monaco.editor.IStandaloneCodeEditor, tab: Tab): void {
-    // Override default find to always show our custom panel
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, () => {
+    const sc = getShortcuts();
+    const bind = (comboKey: string, run: () => void) => {
+      const combo = sc[comboKey];
+      const combos = Array.isArray(combo) ? combo : [combo];
+      for (const c of combos) {
+        const chord = toMonacoKeyChord(monaco as any, c);
+        if (chord != null) editor.addCommand(chord, run);
+      }
+    };
+
+    // Find: open our panel, close Monaco's
+    bind('find', () => {
       try { (window as any).showFind?.(); } catch {}
-      // Ensure built-in find widget is closed
       try { editor.getAction('closeFindWidget')?.run(); } catch {}
     });
-    // Save file (Ctrl+S / Cmd+S)
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-      this.saveCurrentFile(tab);
-    });
-
-    // Find (Ctrl+F / Cmd+F) - handled by app-level search
-    // editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, () => {
-    //   // This is handled by the app-level search panel
-    // });
-
+    // Save
+    bind('save', () => { this.saveCurrentFile(tab); });
     // Format document
-    editor.addCommand(monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF, () => {
-      editor.getAction('editor.action.formatDocument')?.run();
-    });
-
+    bind('formatDocument', () => { editor.getAction('editor.action.formatDocument')?.run(); });
     // Quick fix
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Period, () => {
-      editor.getAction('editor.action.quickFix')?.run();
+    bind('quickFix', () => { editor.getAction('editor.action.quickFix')?.run(); });
+    // Multi-cursor add to next match
+    bind('addCursorToNextMatch', () => { editor.getAction('editor.action.addSelectionToNextFindMatch')?.run(); });
+    // Select all occurrences
+    bind('selectAllOccurrences', () => { editor.getAction('editor.action.selectHighlights')?.run(); });
+    // Delete line
+    bind('deleteLine', () => { editor.getAction('editor.action.deleteLines')?.run(); });
+    // Toggle comment
+    bind('toggleLineComment', () => { editor.getAction('editor.action.commentLine')?.run(); });
+    // Duplicate selection(s) after cursor
+    bind('duplicateSelection', () => { this.duplicateSelectionsAfterCursor(editor); });
+  }
+
+  public duplicateSelectionsAfterCursor(editor: monaco.editor.IStandaloneCodeEditor) {
+    const model = editor.getModel(); if (!model) return;
+    const sels = editor.getSelections() || [];
+    if (!sels.length) return;
+    const ordered = sels.slice().sort((a, b) => {
+      if (a.endLineNumber === b.endLineNumber) return b.endColumn - a.endColumn;
+      return b.endLineNumber - a.endLineNumber;
     });
+    const edits: monaco.editor.IIdentifiedSingleEditOperation[] = [];
+    const nextSelections: monaco.Selection[] = [];
+    for (const s of ordered) {
+      if (s.isEmpty()) continue;
+      const text = model.getValueInRange(s);
+      const insertPos = { lineNumber: s.endLineNumber, column: s.endColumn };
+      const range = new monaco.Range(insertPos.lineNumber, insertPos.column, insertPos.lineNumber, insertPos.column);
+      edits.push({ range, text, forceMoveMarkers: true });
+      const newPos = advancePos(insertPos, text);
+      nextSelections.push(new monaco.Selection(newPos.lineNumber, newPos.column, newPos.lineNumber, newPos.column));
+    }
+    if (!edits.length) return;
+    editor.pushUndoStop();
+    editor.executeEdits('duplicateSelection', edits);
+    if (nextSelections.length) editor.setSelections(nextSelections);
+    editor.pushUndoStop();
+
+    function advancePos(pos: { lineNumber: number; column: number }, text: string) {
+      const parts = text.split('\n');
+      if (parts.length === 1) return { lineNumber: pos.lineNumber, column: pos.column + parts[0].length };
+      const lastLen = parts[parts.length - 1].length;
+      return { lineNumber: pos.lineNumber + parts.length - 1, column: lastLen + 1 };
+    }
   }
 
   private async saveCurrentFile(tab: Tab): Promise<void> {

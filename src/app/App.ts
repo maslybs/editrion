@@ -9,6 +9,7 @@ import { Editor } from '../components/Editor';
 import { Tab } from '../components/Tab';
 import { SearchPanel } from '../components/SearchPanel';
 import { FileExplorer } from '../components/FileExplorer';
+import { getShortcuts, matchesDomEvent } from '../services/shortcuts';
 import type { Tab as TabData } from '../types';
 
 import en from '../locales/en.json';
@@ -226,40 +227,32 @@ export class App {
   }
 
   private setupShortcuts() {
+    const sc = getShortcuts();
     document.addEventListener('keydown', (e) => {
       // Ignore app shortcuts while typing in modal dialogs (AI etc.)
       const target = e.target as HTMLElement;
       if (target && target.closest('.modal')) return;
-      // Block page reload in Tauri (Cmd/Ctrl+R, Shift+Cmd/Ctrl+R, F5)
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'r') {
-        e.preventDefault();
-        e.stopPropagation();
-        return;
-      }
-      if (e.key === 'F5') {
-        e.preventDefault();
-        e.stopPropagation();
-        return;
-      }
-      // Save As must be matched before Save so Shift+Ctrl/Cmd+S works correctly
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); e.stopPropagation(); this.saveActiveFileAs(); return; }
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); e.stopPropagation(); this.saveActiveFile(); return; }
-      if ((e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); this.searchPanel.show(); return; }
-      // Multi-cursor: add selection to next match (Ctrl/Cmd + D)
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'd') {
-        const active = tabsStore.getActiveTab(); const ed = active?.editor; if (ed) { e.preventDefault(); ed.getAction('editor.action.addSelectionToNextFindMatch')?.run(); return; }
-      }
-      // Multi-cursor: select all occurrences (Ctrl/Cmd + Shift + L)
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'l') {
-        const active = tabsStore.getActiveTab(); const ed = active?.editor; if (ed) { e.preventDefault(); ed.getAction('editor.action.selectHighlights')?.run(); return; }
-      }
-      // Delete line (Ctrl/Cmd + Shift + K)
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'k') {
-        const active = tabsStore.getActiveTab(); const ed = active?.editor; if (ed) { e.preventDefault(); ed.getAction('editor.action.deleteLines')?.run(); return; }
-      }
-      // Toggle line comment (Ctrl/Cmd + /)
-      if ((e.metaKey || e.ctrlKey) && e.key === '/') {
-        const active = tabsStore.getActiveTab(); const ed = active?.editor; if (ed) { e.preventDefault(); ed.getAction('editor.action.commentLine')?.run(); return; }
+      // Block page reload in Tauri per shortcuts
+      const preventArr = Array.isArray(sc.preventReload) ? sc.preventReload : [sc.preventReload];
+      if (preventArr.some(c => matchesDomEvent(e, c))) { e.preventDefault(); e.stopPropagation(); return; }
+      // Save As before Save to prefer specific combo
+      if (matchesDomEvent(e, Array.isArray(sc.saveAs) ? sc.saveAs[0] : sc.saveAs as string)) { e.preventDefault(); e.stopPropagation(); this.saveActiveFileAs(); return; }
+      if (matchesDomEvent(e, Array.isArray(sc.save) ? sc.save[0] : sc.save as string)) { e.preventDefault(); e.stopPropagation(); this.saveActiveFile(); return; }
+      if (matchesDomEvent(e, Array.isArray(sc.find) ? sc.find[0] : sc.find as string)) { e.preventDefault(); this.searchPanel.show(); return; }
+
+      // Editor actions when focus is inside the editor
+      const insideEditor = !!(target && target.closest('.monaco-editor'));
+      const insideSearch = !!(target && target.closest('#search-panel'));
+      const active = tabsStore.getActiveTab(); const ed = active?.editor;
+      // When focus is inside the editor, let Monaco handle editor keybindings
+
+      // Editor actions fallback when focus is not inside the editor (and not inside search input)
+      if (!insideEditor && !insideSearch && ed) {
+        if (matchesDomEvent(e, Array.isArray(sc.addCursorToNextMatch) ? sc.addCursorToNextMatch[0] : sc.addCursorToNextMatch as string)) { e.preventDefault(); ed.getAction('editor.action.addSelectionToNextFindMatch')?.run(); return; }
+        if (matchesDomEvent(e, Array.isArray(sc.selectAllOccurrences) ? sc.selectAllOccurrences[0] : sc.selectAllOccurrences as string)) { e.preventDefault(); ed.getAction('editor.action.selectHighlights')?.run(); return; }
+        if (matchesDomEvent(e, Array.isArray(sc.deleteLine) ? sc.deleteLine[0] : sc.deleteLine as string)) { e.preventDefault(); ed.getAction('editor.action.deleteLines')?.run(); return; }
+        if (matchesDomEvent(e, Array.isArray(sc.toggleLineComment) ? sc.toggleLineComment[0] : sc.toggleLineComment as string)) { e.preventDefault(); ed.getAction('editor.action.commentLine')?.run(); return; }
+        if (matchesDomEvent(e, Array.isArray(sc.duplicateSelection) ? sc.duplicateSelection[0] : sc.duplicateSelection as string)) { e.preventDefault(); this.editor.duplicateSelectionsAfterCursor(ed); return; }
       }
       if (e.key === 'Escape') {
         // Mirror legacy behavior: only intercept Esc to close search when visible
