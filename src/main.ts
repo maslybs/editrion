@@ -13,7 +13,7 @@ const app = new App();
 (window as any).openFile = () => app.openFile();
 (window as any).openFolder = () => { /* handled by menu via FileExplorer */ };
 (window as any).saveActiveFile = () => app.saveActiveFile();
-(window as any).showFind = () => { /* handled via SearchPanel */ };
+(window as any).showFind = () => app.showFindPanel();
 (window as any).showReplace = () => { /* TODO */ };
 (window as any).selectAllOccurrences = () => { /* TODO */ };
 

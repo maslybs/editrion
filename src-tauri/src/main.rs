@@ -9,14 +9,26 @@ mod error;
 mod menu;
 
 use app_state::AppState;
-#[cfg(target_os = "macos")]
 use tauri::Manager;
-#[cfg(not(target_os = "macos"))]
-use tauri::Emitter;
 
 fn main() {
+    // Collect startup file paths (Windows/Linux when launched with a file)
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    let startup_paths: Vec<String> = {
+        use std::path::PathBuf;
+        std::env::args_os()
+            .skip(1)
+            .filter_map(|a| {
+                let p = PathBuf::from(&a);
+                if p.is_file() { Some(p.to_string_lossy().to_string()) } else { None }
+            })
+            .collect()
+    };
+    #[cfg(target_os = "macos")]
+    let startup_paths: Vec<String> = Vec::new();
+
     let app = tauri::Builder::default()
-        .manage(AppState::new())
+        .manage(AppState::new_with_paths(startup_paths))
         .plugin(tauri_plugin_dialog::init())
         .on_window_event(|window, event| {
             match event {
@@ -69,7 +81,9 @@ fn main() {
             config::codex_config_path,
             config::codex_config_set,
             // menu
-            menu::rebuild_menu
+            menu::rebuild_menu,
+            // startup
+            commands::app::startup_paths
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

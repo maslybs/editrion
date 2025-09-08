@@ -1,6 +1,8 @@
 import * as monaco from 'monaco-editor';
+import { themeManager } from '../services/themeManager';
 import type { Tab } from '../types';
 import { tabsStore } from '../store/tabsStore';
+import { appStore } from '../store/appStore';
 import { tauriApi } from '../services/tauriApi';
 import { t } from '../services/i18n';
 import { listen } from '@tauri-apps/api/event';
@@ -74,10 +76,11 @@ export class Editor {
     editorElement.style.display = 'none';
     this.container.appendChild(editorElement);
 
+    const currentTheme = themeManager.getCurrentTheme();
     const editor = monaco.editor.create(editorElement, {
       value: content,
       language: this.detectLanguage(tab.path),
-      theme: 'vs-dark',
+      theme: currentTheme?.editorTheme || 'vs-dark',
       automaticLayout: true,
       minimap: { enabled: true },
       scrollBeyondLastLine: false,
@@ -89,6 +92,13 @@ export class Editor {
       selectOnLineNumbers: true,
       matchBrackets: 'always',
       contextmenu: true,
+      unicodeHighlight: {
+        ambiguousCharacters: false,
+        invisibleCharacters: false,
+        includeComments: false,
+        includeStrings: false,
+        nonBasicASCII: false,
+      } as any,
       fontSize: 14,
       fontFamily: 'Consolas, Monaco, Menlo, "Ubuntu Mono", monospace',
       renderWhitespace: 'selection',
@@ -646,6 +656,12 @@ export class Editor {
 
 
   private setupKeybindings(editor: monaco.editor.IStandaloneCodeEditor, tab: Tab): void {
+    // Override default find to always show our custom panel
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, () => {
+      try { (window as any).showFind?.(); } catch {}
+      // Ensure built-in find widget is closed
+      try { editor.getAction('closeFindWidget')?.run(); } catch {}
+    });
     // Save file (Ctrl+S / Cmd+S)
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
       this.saveCurrentFile(tab);
@@ -723,7 +739,12 @@ export class Editor {
       try { tab.editor.updateOptions({ minimap: { enabled: true } as any }); } catch {}
       try { tab.editor.layout(); } catch {}
       try { setTimeout(() => tab.editor?.layout(), 0); } catch {}
-      try { tab.editor.focus(); } catch {}
+      try {
+        // Avoid stealing focus from the search field if it is visible
+        if (!appStore.getState().searchPanelVisible) {
+          tab.editor.focus();
+        }
+      } catch {}
     }
 
     // Remember last active tab for macros

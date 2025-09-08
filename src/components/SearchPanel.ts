@@ -56,17 +56,36 @@ export class SearchPanel {
         if (e.shiftKey) this.findPrev(); else this.findNext();
       } else if (e.key === 'Escape') {
         e.preventDefault(); e.stopPropagation(); this.hide();
+      } else if ((e.metaKey || e.ctrlKey) && (e.key === 'a' || e.key === 'A')) {
+        // Ensure Cmd/Ctrl + A selects only the input's content
+        e.preventDefault();
+        e.stopPropagation();
+        try { this.input.select(); } catch {}
       }
     });
 
     this.input.addEventListener('input', () => {
+      // Capture caret before any async work
+      const start = this.input.selectionStart ?? this.input.value.length;
+      const end = this.input.selectionEnd ?? start;
       if (this.debounceHandle) window.clearTimeout(this.debounceHandle);
       this.debounceHandle = window.setTimeout(() => this.updateSearch(), this.debounceMs);
+      // Keep focus and restore caret even if the editor briefly steals it
+      try {
+        this.input.focus();
+        this.input.setSelectionRange(start, end);
+      } catch {}
     });
   }
 
   show() {
     this.root.classList.remove('hidden');
+    // Ensure Monaco's built-in find widget is closed if it was opened
+    try {
+      const active = tabsStore.getActiveTab();
+      const ed = active?.editor as any;
+      ed?.getAction?.('closeFindWidget')?.run?.();
+    } catch {}
     this.input.focus();
     this.input.select();
     appStore.showSearchPanel();
@@ -141,7 +160,7 @@ export class SearchPanel {
       // Reset current index to first match if selection not on a match
       this.currentIndex = this.indexOfSelection(editor);
     } catch {
-      this.countEl.textContent = '';
+      this.countEl.textContent = t('search.invalidRegex');
       const active = tabsStore.getActiveTab();
       if (active) tabsStore.clearSearchDecorations(active.id);
       this.lastMatches = [];
@@ -158,10 +177,20 @@ export class SearchPanel {
       if (this.options.wholeWord && !isRegex) { q = `\\b${this.escapeRegExp(query)}\\b`; isRegex = true; }
       const matches = model.findMatches(q, false, isRegex, this.options.caseSensitive, null, true);
       if (!matches.length) return;
-      editor.setSelection(matches[0].range);
-      editor.getAction('editor.action.selectHighlights')?.run();
+      // Select all matches explicitly (multi-cursor) and keep focus in the editor
+      const selections = matches.map(m => ({
+        selectionStartLineNumber: m.range.startLineNumber,
+        selectionStartColumn: m.range.startColumn,
+        positionLineNumber: m.range.endLineNumber,
+        positionColumn: m.range.endColumn,
+      }));
+      editor.setSelections(selections as any);
+      editor.revealRangeInCenter(matches[0].range);
       editor.focus();
-    } catch {}
+    } catch {
+      // Show regex error if applicable; keep focus in the input
+      try { this.countEl.textContent = t('search.invalidRegex'); } catch {}
+    }
   }
 
   private findNext() {

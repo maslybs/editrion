@@ -119,42 +119,40 @@ fn run_external_cli_stream(
         }
 
         if cfg!(target_os = "windows") {
-            // On Windows, prefer direct spawn if we can resolve the binary path.
+            // On Windows, avoid exceeding command-line length limits by sending prompt via stdin
             if let Some(bin_path) = resolve_binary_path(cli_name) {
                 let mut cmd = Command::new(&bin_path);
                 cmd.arg("exec").arg("--skip-git-repo-check");
                 for a in &pre_flags { cmd.arg(a); }
-                cmd.arg(&prompt);
                 if let Some(ref dir) = cwd { if Path::new(dir).is_dir() { let _ = cmd.current_dir(dir); } }
-                cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+                cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
                 return cmd.spawn();
             }
             // Fallback to using the name as-is; rely on PATH
             let mut cmd = Command::new(cli_name);
             cmd.arg("exec").arg("--skip-git-repo-check");
             for a in &pre_flags { cmd.arg(a); }
-            cmd.arg(&prompt);
             if let Some(ref dir) = cwd { if Path::new(dir).is_dir() { let _ = cmd.current_dir(dir); } }
-            cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+            cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
             return cmd.spawn();
         } else {
             // On macOS/Linux, always run via login shell so PATH (node, brew, etc.) is loaded.
             let flags = if pre_flags.is_empty() { String::new() } else { format!("{} ", pre_flags.join(" ")) };
+            // Prefer sending prompt via stdin as well to avoid ARG_MAX issues on very large inputs
             let cmdline = format!(
-                "{} exec --skip-git-repo-check {}{}",
+                "{} exec --skip-git-repo-check {}",
                 cli_name,
                 flags,
-                shell_quote(&prompt)
             );
             let mut cmd = Command::new("/bin/zsh");
             cmd.arg("-lc").arg(&cmdline);
             if let Some(ref dir) = cwd { if Path::new(dir).is_dir() { let _ = cmd.current_dir(dir); } }
-            cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+            cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
             return cmd.spawn();
         }
     };
 
-    let child = spawn().map_err(AppError::Io)?;
+    let mut child = spawn().map_err(AppError::Io)?;
     let child_arc = Arc::new(Mutex::new(child));
 
     // Register process for cancellation
@@ -166,6 +164,21 @@ fn run_external_cli_stream(
 
     let stdout_buf = Arc::new(Mutex::new(String::new()));
     let mut join_handles = vec![];
+
+    // Feed prompt to child's stdin (for large inputs and Windows safety)
+    {
+        let prompt_clone = prompt.clone();
+        let mut stdin = { child_arc.lock().ok().and_then(|mut c| c.stdin.take()) };
+        if let Some(mut pipe) = stdin.take() {
+            let h = std::thread::spawn(move || {
+                use std::io::Write;
+                let _ = pipe.write_all(prompt_clone.as_bytes());
+                let _ = pipe.flush();
+                // drop(pipe) closes stdin
+            });
+            join_handles.push(h);
+        }
+    }
 
     let mut out = { child_arc.lock().ok().and_then(|mut c| c.stdout.take()) };
     if let Some(out) = out.take() {
