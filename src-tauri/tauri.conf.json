@@ -1,6 +1,6 @@
 {
   "productName": "Editrion (Beta)",
-  "version": "1.0.0",
+  "version": "0.0.2",
   "identifier": "com.editrion.editor",
   "build": {
     "beforeBuildCommand": "npm run ensure:icons && npm run build",

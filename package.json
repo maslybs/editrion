@@ -1,6 +1,6 @@
 {
   "name": "editrion",
-  "version": "1.0.0",
+  "version": "0.0.2",
   "description": "A modern code editor built with Tauri",
   "type": "module",
   "license": "MIT",
