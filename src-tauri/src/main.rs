@@ -9,7 +9,7 @@ mod error;
 mod menu;
 
 use app_state::AppState;
-use tauri::Manager;
+use tauri::Emitter;
 
 fn main() {
     // Collect startup file paths (Windows/Linux when launched with a file)
