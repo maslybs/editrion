@@ -39,6 +39,15 @@ export class TauriAPI {
     return await invoke('drafts_dir');
   }
 
+  async getStartupPaths(): Promise<string[]> {
+    try {
+      const paths = await invoke<string[]>('startup_paths');
+      return Array.isArray(paths) ? paths : [];
+    } catch {
+      return [];
+    }
+  }
+
   // External CLI (AI Integration)
   async codexExecStream(
     prompt: string, 

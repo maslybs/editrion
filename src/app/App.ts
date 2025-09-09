@@ -1,6 +1,5 @@
 import { listen } from '@tauri-apps/api/event';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import * as monaco from 'monaco-editor';
 import { initI18n, setLocale, t, registerDictionaries, applyTranslations } from '../services/i18n';
 import { themeManager } from '../services/themeManager';
 import { tauriApi } from '../services/tauriApi';
@@ -10,6 +9,7 @@ import { Editor } from '../components/Editor';
 import { Tab } from '../components/Tab';
 import { SearchPanel } from '../components/SearchPanel';
 import { FileExplorer } from '../components/FileExplorer';
+import { getShortcuts, matchesDomEvent } from '../services/shortcuts';
 import type { Tab as TabData } from '../types';
 
 import en from '../locales/en.json';
@@ -29,6 +29,8 @@ export class App {
   private searchPanel: SearchPanel;
   private fileExplorer: FileExplorer;
   private tabComponents: Map<string, Tab> = new Map();
+  // Track a compact signature of tabs to avoid unnecessary re-renders
+  private prevTabsSignature: string = '';
   private draftsDir: string | null = null;
   private draftTimers: Record<string, number> = {};
   private aiOverrides: { model?: string; effort?: 'minimal'|'low'|'medium'|'high'; summary?: 'auto'|'concise'|'detailed'|'none'; verbosity?: 'low'|'medium'|'high' } = {};
@@ -58,10 +60,10 @@ export class App {
     // Do not overwrite clean-exit flag on startup; we check it in prepareDrafts()
 
     // Theme
+    const savedMode = localStorage.getItem('editrion.themeMode');
     const savedTheme = localStorage.getItem('editrion.theme') || 'dark';
-    const isLight = savedTheme.includes('light');
+    const isLight = savedMode ? savedMode === 'light' : savedTheme.includes('light');
     themeManager.setTheme(isLight ? 'light' : 'dark');
-    document.body.setAttribute('data-theme', isLight ? 'light' : 'dark');
 
     // Components
     this.editor = new Editor(this.editorContainer);
@@ -78,6 +80,8 @@ export class App {
     // Events
     this.setupShortcuts();
     this.setupMenuListeners();
+    this.setupOpenWithListener();
+    this.openStartupPaths();
     this.setupTabsOverflowMenu();
     // Horizontal wheel scroll over tabs
     this.tabsContainer.addEventListener('wheel', (e: WheelEvent) => {
@@ -164,7 +168,24 @@ export class App {
   }
 
   private subscribeToTabs() {
-    tabsStore.subscribe(() => this.renderTabs());
+    tabsStore.subscribe((state) => {
+      const sig = this.computeTabsRenderSignature(state);
+      if (sig !== this.prevTabsSignature) {
+        this.prevTabsSignature = sig;
+        this.renderTabs();
+      }
+    });
+  }
+
+  // Only re-render tabs when structural UI-relevant fields change
+  private computeTabsRenderSignature(state = tabsStore.getState()): string {
+    const active = state.activeTabId || '';
+    const parts: string[] = [active, String(state.tabs.length)];
+    for (const t of state.tabs) {
+      // Include only fields that affect tab strip or editor mode (image vs editor)
+      parts.push(t.id, t.name, t.path || '', String(!!t.isDirty));
+    }
+    return parts.join('|');
   }
 
   private renderTabs() {
@@ -206,40 +227,32 @@ export class App {
   }
 
   private setupShortcuts() {
+    const sc = getShortcuts();
     document.addEventListener('keydown', (e) => {
       // Ignore app shortcuts while typing in modal dialogs (AI etc.)
       const target = e.target as HTMLElement;
       if (target && target.closest('.modal')) return;
-      // Block page reload in Tauri (Cmd/Ctrl+R, Shift+Cmd/Ctrl+R, F5)
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'r') {
-        e.preventDefault();
-        e.stopPropagation();
-        return;
-      }
-      if (e.key === 'F5') {
-        e.preventDefault();
-        e.stopPropagation();
-        return;
-      }
-      // Save As must be matched before Save so Shift+Ctrl/Cmd+S works correctly
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); e.stopPropagation(); this.saveActiveFileAs(); return; }
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); e.stopPropagation(); this.saveActiveFile(); return; }
-      if ((e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); this.searchPanel.show(); return; }
-      // Multi-cursor: add selection to next match (Ctrl/Cmd + D)
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'd') {
-        const active = tabsStore.getActiveTab(); const ed = active?.editor; if (ed) { e.preventDefault(); ed.getAction('editor.action.addSelectionToNextFindMatch')?.run(); return; }
-      }
-      // Multi-cursor: select all occurrences (Ctrl/Cmd + Shift + L)
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'l') {
-        const active = tabsStore.getActiveTab(); const ed = active?.editor; if (ed) { e.preventDefault(); ed.getAction('editor.action.selectHighlights')?.run(); return; }
-      }
-      // Delete line (Ctrl/Cmd + Shift + K)
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'k') {
-        const active = tabsStore.getActiveTab(); const ed = active?.editor; if (ed) { e.preventDefault(); ed.getAction('editor.action.deleteLines')?.run(); return; }
-      }
-      // Toggle line comment (Ctrl/Cmd + /)
-      if ((e.metaKey || e.ctrlKey) && e.key === '/') {
-        const active = tabsStore.getActiveTab(); const ed = active?.editor; if (ed) { e.preventDefault(); ed.getAction('editor.action.commentLine')?.run(); return; }
+      // Block page reload in Tauri per shortcuts
+      const preventArr = Array.isArray(sc.preventReload) ? sc.preventReload : [sc.preventReload];
+      if (preventArr.some(c => matchesDomEvent(e, c))) { e.preventDefault(); e.stopPropagation(); return; }
+      // Save As before Save to prefer specific combo
+      if (matchesDomEvent(e, Array.isArray(sc.saveAs) ? sc.saveAs[0] : sc.saveAs as string)) { e.preventDefault(); e.stopPropagation(); this.saveActiveFileAs(); return; }
+      if (matchesDomEvent(e, Array.isArray(sc.save) ? sc.save[0] : sc.save as string)) { e.preventDefault(); e.stopPropagation(); this.saveActiveFile(); return; }
+      if (matchesDomEvent(e, Array.isArray(sc.find) ? sc.find[0] : sc.find as string)) { e.preventDefault(); this.searchPanel.show(); return; }
+
+      // Editor actions when focus is inside the editor
+      const insideEditor = !!(target && target.closest('.monaco-editor'));
+      const insideSearch = !!(target && target.closest('#search-panel'));
+      const active = tabsStore.getActiveTab(); const ed = active?.editor;
+      // When focus is inside the editor, let Monaco handle editor keybindings
+
+      // Editor actions fallback when focus is not inside the editor (and not inside search input)
+      if (!insideEditor && !insideSearch && ed) {
+        if (matchesDomEvent(e, Array.isArray(sc.addCursorToNextMatch) ? sc.addCursorToNextMatch[0] : sc.addCursorToNextMatch as string)) { e.preventDefault(); ed.getAction('editor.action.addSelectionToNextFindMatch')?.run(); return; }
+        if (matchesDomEvent(e, Array.isArray(sc.selectAllOccurrences) ? sc.selectAllOccurrences[0] : sc.selectAllOccurrences as string)) { e.preventDefault(); ed.getAction('editor.action.selectHighlights')?.run(); return; }
+        if (matchesDomEvent(e, Array.isArray(sc.deleteLine) ? sc.deleteLine[0] : sc.deleteLine as string)) { e.preventDefault(); ed.getAction('editor.action.deleteLines')?.run(); return; }
+        if (matchesDomEvent(e, Array.isArray(sc.toggleLineComment) ? sc.toggleLineComment[0] : sc.toggleLineComment as string)) { e.preventDefault(); ed.getAction('editor.action.commentLine')?.run(); return; }
+        if (matchesDomEvent(e, Array.isArray(sc.duplicateSelection) ? sc.duplicateSelection[0] : sc.duplicateSelection as string)) { e.preventDefault(); this.editor.duplicateSelectionsAfterCursor(ed); return; }
       }
       if (e.key === 'Escape') {
         // Mirror legacy behavior: only intercept Esc to close search when visible
@@ -253,6 +266,9 @@ export class App {
       }
     }, true);
   }
+
+  // Expose for editor/global callers
+  public showFindPanel() { this.searchPanel.show(); }
 
   private setupTabsOverflowMenu() {
     const hide = () => this.hideTabsOverflowMenu();
@@ -312,8 +328,8 @@ export class App {
           break;
         }
         case 'quit_app': await this.handleQuitRequest(); break;
-        case 'theme_dark': themeManager.setTheme('dark'); document.body.setAttribute('data-theme', 'dark'); monaco.editor.setTheme('sublime-dark'); localStorage.setItem('editrion.theme', 'dark'); break;
-        case 'theme_light': themeManager.setTheme('light'); document.body.setAttribute('data-theme', 'light'); localStorage.setItem('editrion.theme', 'light'); break;
+        case 'theme_dark': themeManager.setTheme('dark'); localStorage.setItem('editrion.theme', 'dark'); localStorage.setItem('editrion.themeMode', 'dark'); break;
+        case 'theme_light': themeManager.setTheme('light'); localStorage.setItem('editrion.theme', 'light'); localStorage.setItem('editrion.themeMode', 'light'); break;
         case 'theme_load_custom':
           try {
             const picked = await tauriApi.openFileDialog([{ name: 'JSON', extensions: ['json'] }]);
@@ -323,13 +339,13 @@ export class App {
             const def = JSON.parse(content);
             const id = await themeManager.loadCustomTheme(def);
             themeManager.setTheme(id);
-            document.body.setAttribute('data-theme', 'custom');
             if (def && def.name) {
               const raw = localStorage.getItem('editrion.customThemes');
               const map = raw ? JSON.parse(raw) as Record<string, any> : {};
               map[String(def.name)] = def;
               localStorage.setItem('editrion.customThemes', JSON.stringify(map));
               localStorage.setItem('editrion.theme', `custom:${String(def.name)}`);
+              localStorage.setItem('editrion.themeMode', def.isDark ? 'dark' : 'light');
             }
           } catch (e) {
             console.error('Failed to load custom theme:', e);
@@ -365,6 +381,36 @@ export class App {
     await listen('request-close', async () => {
       await this.handleQuitRequest();
     });
+  }
+
+  private async setupOpenWithListener() {
+    // Receive OS-level "Open with" file paths from backend
+    await listen('open-paths', async (event) => {
+      try {
+        const payload = event.payload as any;
+        const paths: string[] = Array.isArray(payload)
+          ? payload as string[]
+          : (payload && Array.isArray((payload as any).paths)) ? (payload as any).paths : [];
+        for (const p of paths) {
+          const name = this.basename(p);
+          await this.openFileByPath(p, name);
+        }
+      } catch (e) {
+        console.error('Failed to handle open-paths event', e);
+      }
+    });
+  }
+
+  private async openStartupPaths() {
+    try {
+      const paths = await tauriApi.getStartupPaths();
+      for (const p of paths) {
+        const name = this.basename(p);
+        await this.openFileByPath(p, name);
+      }
+    } catch (e) {
+      console.warn('No startup paths or failed to process:', e);
+    }
   }
 
   private async updateNativeMenuLabels() {
@@ -570,9 +616,8 @@ export class App {
       const keys: string[] = []; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k) keys.push(k); }
       for (const k of keys) { if (k === 'editrion-settings' || k.startsWith('editrion.')) { try { localStorage.removeItem(k); } catch {} } }
       themeManager.setTheme('dark');
-      document.body.setAttribute('data-theme', 'dark');
-      monaco.editor.setTheme('sublime-dark');
       localStorage.setItem('editrion.theme', 'dark');
+      localStorage.setItem('editrion.themeMode', 'dark');
       setLocale('en'); applyTranslations(); this.updateNativeMenuLabels();
       try { this.fileExplorer.clearAllRoots(); } catch {}
       // No success alert per UX: one confirm is enough

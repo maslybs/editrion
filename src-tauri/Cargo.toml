@@ -1,7 +1,7 @@
 [package]
 name = "editrion"
-version = "1.0.0"
-description = "A modern code editor"
+version = "0.0.2"
+description = "A modern and simple text editor"
 authors = ["you"]
 license = ""
 repository = ""

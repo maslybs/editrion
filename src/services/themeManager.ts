@@ -57,15 +57,20 @@ export class ThemeManager {
     // Apply to Monaco editors
     monaco.editor.setTheme(theme.editorTheme);
 
-    // Apply to document body
-    document.body.className = document.body.className
-      .split(' ')
-      .filter(cls => !cls.startsWith('theme-'))
-      .join(' ');
-    
-    if (theme.cssClassName) {
-      document.body.classList.add(theme.cssClassName);
-    }
+    // Apply to document body: use data-theme so CSS variables switch instantly
+    try {
+      document.body.setAttribute('data-theme', theme.isDark ? 'dark' : 'light');
+    } catch {}
+    // Optionally keep a class for consumers that rely on it
+    try {
+      document.body.className = document.body.className
+        .split(' ')
+        .filter(cls => !cls.startsWith('theme-'))
+        .join(' ');
+      if (theme.cssClassName) {
+        document.body.classList.add(theme.cssClassName);
+      }
+    } catch {}
 
     // Update meta theme-color for mobile browsers
     this.updateMetaThemeColor(theme.isDark);
