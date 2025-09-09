@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use tauri::{Emitter, State, Window};
 
 use crate::app_state::AppState;
-use crate::core::process_manager::{resolve_binary_path, shell_quote, strip_ansi};
+use crate::core::process_manager::{resolve_binary_path, strip_ansi};
 use crate::error::{AppError, Result};
 
 #[tauri::command]
@@ -152,7 +152,7 @@ fn run_external_cli_stream(
         }
     };
 
-    let mut child = spawn().map_err(AppError::Io)?;
+    let child = spawn().map_err(AppError::Io)?;
     let child_arc = Arc::new(Mutex::new(child));
 
     // Register process for cancellation
