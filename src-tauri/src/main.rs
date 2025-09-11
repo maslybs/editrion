@@ -9,6 +9,9 @@ mod error;
 mod menu;
 
 use app_state::AppState;
+#[cfg(target_os = "macos")]
+use tauri::{Emitter, Manager};
+#[cfg(not(target_os = "macos"))]
 use tauri::Emitter;
 
 fn main() {
@@ -97,7 +100,52 @@ fn main() {
                     let _ = window.set_focus();
                 }
             }
+            #[cfg(target_os = "macos")]
+            tauri::RunEvent::Opened { urls } => {
+                // macOS "Open With" / drag-n-drop on Dock passes file:// URLs here
+                let mut paths: Vec<String> = Vec::new();
+                for url in urls {
+                    let s = url.to_string();
+                    if s.starts_with("file://") {
+                        let decoded = percent_decode(&s[7..]);
+                        paths.push(decoded);
+                    }
+                }
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let _ = window.emit("open-paths", serde_json::json!({ "paths": paths }));
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
             _ => {}
         }
     });
+}
+
+fn percent_decode(s: &str) -> String {
+    // Minimal percent-decoder for file URLs
+    let mut out = String::with_capacity(s.len());
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let (Some(h), Some(l)) = (hex(bytes[i + 1]), hex(bytes[i + 2])) {
+                out.push((h * 16 + l) as char);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i] as char);
+        i += 1;
+    }
+    out
+}
+
+fn hex(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
 }

@@ -1,4 +1,4 @@
-# Editrion (Beta)
+# Editrion
 
 A lightweight code editor built with Tauri and Monaco Editor. This is a Beta release.
 

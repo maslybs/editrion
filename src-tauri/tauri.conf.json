@@ -1,6 +1,6 @@
 {
-  "productName": "Editrion (Beta)",
-  "version": "0.0.2",
+  "productName": "Editrion",
+  "version": "0.0.2-1",
   "identifier": "com.editrion.editor",
   "build": {
     "beforeBuildCommand": "npm run ensure:icons && npm run build",
@@ -13,7 +13,7 @@
       {
         "fullscreen": false,
         "resizable": true,
-        "title": "Editrion - Text editor (Beta)",
+        "title": "Editrion - Text editor",
         "width": 1200,
         "height": 800,
         "minWidth": 800,
@@ -42,6 +42,14 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "fileAssociations": [
+      {
+        "name": "Text & Code",
+        "ext": ["txt","md","markdown","json","yaml","yml","toml","ini","conf","log","js","jsx","ts","tsx","py","rs","go","java","c","cpp","h","hpp","cs","php","rb","kt","sql","html","htm","css","scss","sass","less","sh","zsh","bash","ps1"],
+        "mimeType": "text/plain",
+        "role": "Editor"
+      }
+    ],
     "icon": [
       "icons/icon.icns",
       "icons/icon.ico",

@@ -40,7 +40,7 @@ const FILE_MENU_ITEMS: &[MenuItemConfig] = &[
     MenuItemConfig { id: "save", label_key: "menu.item.save", default_label: "Save", shortcut: Some("CmdOrCtrl+S") },
     MenuItemConfig { id: "save_as", label_key: "menu.item.saveAs", default_label: "Save As…", shortcut: Some("CmdOrCtrl+Shift+S") },
     MenuItemConfig { id: "close_tab", label_key: "menu.item.closeTab", default_label: "Close Tab", shortcut: Some("CmdOrCtrl+W") },
-    MenuItemConfig { id: "quit_app", label_key: "menu.item.quit", default_label: "Quit Editrion (Beta)", shortcut: Some("CmdOrCtrl+Q") },
+    MenuItemConfig { id: "quit_app", label_key: "menu.item.quit", default_label: "Quit Editrion", shortcut: Some("CmdOrCtrl+Q") },
 ];
 
 const EDIT_MENU_ITEMS: &[MenuItemConfig] = &[

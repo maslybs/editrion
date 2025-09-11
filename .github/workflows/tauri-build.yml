@@ -17,7 +17,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        # Build both mac architectures via separate runners and Windows
+        os: [macos-14, macos-13, windows-latest]
 
     steps:
       - name: Checkout
@@ -66,7 +67,7 @@ jobs:
       - name: Upload bundles
         uses: actions/upload-artifact@v4
         with:
-          name: tauri-bundles-${{ runner.os }}
+          name: tauri-bundles-${{ matrix.os }}
           path: |
             src-tauri/target/release/bundle/**
 
