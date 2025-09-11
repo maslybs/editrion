@@ -18,8 +18,8 @@
     "notarize:finalize": "bash scripts/notary-finalize.sh",
     "tauri:build:mac": "CI=true tauri build",
     "tauri:build:mac:app": "CI=true tauri build --bundles app",
-    "tauri:build:mac:arm64": "TAURI_BUILD_TARGET=aarch64-apple-darwin tauri build",
-    "tauri:build:mac:x64": "TAURI_BUILD_TARGET=x86_64-apple-darwin tauri build",
+    "tauri:build:mac:arm64": "tauri build --target aarch64-apple-darwin",
+    "tauri:build:mac:x64": "tauri build --target x86_64-apple-darwin",
     "tauri:build:mac:both": "npm run tauri:build:mac:arm64 && npm run tauri:build:mac:x64"
   },
   "dependencies": {
