@@ -110,6 +110,7 @@ pub fn resolve_binary_path(name: &str) -> Option<PathBuf> {
     None
 }
 
+#[allow(dead_code)]
 pub fn shell_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\'\''"))
 }
@@ -214,4 +215,3 @@ mod tests {
         assert!(result.is_none());
     }
 }
-
