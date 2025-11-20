@@ -40,12 +40,12 @@ export class Tab {
     this.element.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      
+
       // Don't activate if clicking close button
       if ((e.target as HTMLElement).classList.contains('close')) {
         return;
       }
-      
+
       tabsStore.setActiveTab(this.data.id);
     });
 
@@ -95,7 +95,7 @@ export class Tab {
     menu.className = 'context-menu tab-context-menu';
     menu.style.left = `${e.clientX}px`;
     menu.style.top = `${e.clientY}px`;
-    
+
     menu.innerHTML = `
       <div class="context-menu-item" data-action="close">${t('context.close') || 'Close'}</div>
       <div class="context-menu-item" data-action="close-others">${t('context.closeOthers')}</div>
@@ -112,7 +112,7 @@ export class Tab {
     menu.addEventListener('click', (event) => {
       const target = event.target as HTMLElement;
       const action = target.dataset.action;
-      
+
       switch (action) {
         case 'close':
           { const api = (window as any).requestCloseTab; if (api) api(this.data.id); else tabsStore.closeTab(this.data.id); }
@@ -137,7 +137,7 @@ export class Tab {
           navigator.clipboard.writeText(this.data.path);
           break;
       }
-      
+
       menu.remove();
     });
 
@@ -154,17 +154,17 @@ export class Tab {
   private startRename(): void {
     const label = this.element.querySelector('.tab-label') as HTMLElement;
     const currentName = this.data.name;
-    
+
     // Create input element
     const input = document.createElement('input');
     input.type = 'text';
     input.value = currentName;
     input.className = 'tab-rename-input';
-    
+
     // Replace label with input
     label.style.display = 'none';
     label.parentNode?.insertBefore(input, label);
-    
+
     input.focus();
     input.select();
 
@@ -175,7 +175,7 @@ export class Tab {
         tabsStore.updateTab(this.data.id, { name: newName });
         this.updateDisplay();
       }
-      
+
       input.remove();
       label.style.display = '';
     };
@@ -201,7 +201,7 @@ export class Tab {
     if (!updatedTab) return;
 
     this.data = updatedTab;
-    
+
     // Update label (append dirty dot at end)
     const label = this.element.querySelector('.tab-label');
     if (label) {
@@ -212,6 +212,10 @@ export class Tab {
     // Update active state
     if (tabsStore.getState().activeTabId === this.data.id) {
       this.element.classList.add('active');
+      // Ensure active tab is visible
+      setTimeout(() => {
+        this.element.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+      }, 10);
     } else {
       this.element.classList.remove('active');
     }
